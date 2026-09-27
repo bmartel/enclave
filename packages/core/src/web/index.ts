@@ -10,8 +10,11 @@ import {
   transformersReranker,
   type LoadProgress,
 } from '../transformers/index.js'
-import type { Db, Embedder, Model, Reranker } from '../types.js'
+import type { Db, Downloadable, Embedder, Model, Reranker } from '../types.js'
 import {
+  BROWSER_LLMS,
+  EMBEDDING_PRESETS,
+  RERANKER_PRESETS,
   findEmbedding,
   findLLM,
   findReranker,
@@ -54,7 +57,7 @@ export interface BrowserLLMOptions {
   /** WebLLM: grammar-constrain tool calls. Default true. */
   constrainToolCalls?: boolean
   /** WebLLM: keep reasoning across turns for KV reuse (`all`) or drop it (`current-turn`, default). */
-  reasoningHistory?: 'current-turn' | 'all'
+  reasoningHistory?: 'current-turn' | 'all' | 'auto'
   /** WebLLM: serve weights from your own host. See `selfHostedAppConfig`. */
   appConfig?: import('@mlc-ai/web-llm').AppConfig
   contextWindow?: number
@@ -150,6 +153,25 @@ export interface WebEnclaveOptions extends Omit<EnclaveOptions, 'db' | 'model' |
   onProgress?(p: WebProgress): void
 }
 
+export interface ModelCacheEntry {
+  kind: 'llm' | 'embedding' | 'reranker'
+  /** Catalog preset id. */
+  id: string
+  label: string
+  downloadMB: number
+  /** Every file needed on this device is in the browser cache (loads offline). */
+  cached: boolean
+  /** Currently in use by this enclave. */
+  active: boolean
+}
+
+export interface ModelCache {
+  /** Cache state of every catalog model, resolved for this device and hosting (self-hosted or public). */
+  status(): Promise<ModelCacheEntry[]>
+  /** Delete one model's cached files. */
+  clear(kind: ModelCacheEntry['kind'], id: string): Promise<void>
+}
+
 export interface WebEnclave extends Enclave {
   device: DeviceProfile
   plan: {
@@ -159,6 +181,7 @@ export interface WebEnclave extends Enclave {
   }
   /** Switch the chat model: a browser preset id, WebLLM id, or any `Model`. */
   useModel(selection: string | Model): Promise<Model>
+  modelCache: ModelCache
 }
 
 /**
@@ -282,8 +305,37 @@ export async function createWebEnclave(options: WebEnclaveOptions = {}): Promise
     },
   })
 
+  const component = async (kind: ModelCacheEntry['kind'], id: string) => {
+    if (kind === 'llm') return (await browserLLM(id, { ...llmOptions, onProgress: undefined })) as Model & Partial<Downloadable>
+    const common = workers.ml ? { worker: workers.ml } : {}
+    return kind === 'embedding' ? transformersEmbedder({ preset: id, ...common }) : transformersReranker({ preset: id, ...common })
+  }
+  const modelCache: ModelCache = {
+    async status() {
+      const rows = [
+        ...BROWSER_LLMS.map((p) => ({ kind: 'llm' as const, id: p.id, label: p.label, downloadMB: p.downloadMB })),
+        ...EMBEDDING_PRESETS.map((p) => ({ kind: 'embedding' as const, id: p.id, label: p.label, downloadMB: p.downloadMB })),
+        ...RERANKER_PRESETS.map((p) => ({ kind: 'reranker' as const, id: p.id, label: p.label, downloadMB: p.downloadMB })),
+      ]
+      const activeIds = new Set([enclave.model.id, embedder.id, reranker?.id].filter(Boolean))
+      return Promise.all(
+        rows.map(async (row) => {
+          const c = await component(row.kind, row.id).catch(() => undefined)
+          if (row.kind === 'llm' && !device.webgpu && findLLM(row.id)?.runtime === 'webllm') {
+            return { ...row, cached: false, active: false }
+          }
+          return { ...row, cached: (await c?.isCached?.().catch(() => false)) ?? false, active: !!c && activeIds.has(c.id) }
+        }),
+      )
+    },
+    async clear(kind, id) {
+      await (await component(kind, id)).clearCache?.()
+    },
+  }
+
   return Object.assign(enclave, {
     device,
+    modelCache,
     plan: { llm: llmPlan, embedding: embeddingPlan, reranker: rerankerPlan },
     async useModel(selection: string | Model) {
       const next = typeof selection === 'string' ? await browserLLM(selection, llmOptions) : selection

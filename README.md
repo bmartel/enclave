@@ -138,6 +138,18 @@ transformersReranker({ preset: 'mxbai-rerank-xsmall', worker })
 
 Switching embedding models is safe. The index records which embedder built it, and `createWebEnclave` re-embeds existing documents automatically (`knowledge.autoReindex`).
 
+### Download and cache management
+
+Every downloadable component implements `isCached()`, `load()` and `clearCache()`. `isCached()` is true only when every file needed on this device is in the browser cache, for the dtype and backend the device will actually use: WebLLM weights plus the compiled model library, or ONNX weights, tokenizer and config. `createWebEnclave` exposes the whole catalog:
+
+```ts
+const status = await ai.modelCache.status()
+// [{ kind: 'llm', id: 'qwen3-4b', cached: true, active: true, downloadMB: 2300 }, { kind: 'embedding', ... }, ...]
+await ai.modelCache.clear('llm', 'qwen3-8b')
+```
+
+Status is computed against the same hosting configuration the app downloads with, so self-hosted models are reported correctly. WebLLM never caches model libraries served from a `localhost` URL (a development convenience), so test offline behaviour on a real hostname or `127.0.0.1`.
+
 ### Local servers (optional)
 
 For machines that already run a model server:
@@ -228,7 +240,16 @@ Enclave's prompt layout, decoding and agent loop are built around how WebLLM act
   Measured on Qwen3 4B: after a tool result, the next step prefilled 250 tokens instead of the whole prompt, and time to first token fell from 2.2 s to 0.7 s.
 - **Grammar-constrained tool calls.** WebLLM's xgrammar structural tags leave text free. Once the model writes `<tool_call>`, it can only complete a call to a real tool, with arguments that validate against that tool's schema. Schemas xgrammar can't compile fall back to unconstrained decoding.
 - **Adaptive thinking.** Qwen3 reasons before acting and answers directly after tool results.
-- **Per-step metrics.** Every `step-finish` event carries prefill tokens, KV reuse, time to first token, prefill/decode throughput and grammar compile time.
+- **Reasoning history** (`webllm: { reasoningHistory }`), measured on 3 conversations × 3 repeats (33 graded later turns):
+
+  | Mode | Later turns passed | Time to first token (later turns) | Behaviour |
+  |---|---|---|---|
+  | `current-turn` (default) | **33/33** | 3.2 s | Drops earlier reasoning, as Qwen3's template does. The prompt is re-read at every new user turn. |
+  | `auto` | 31/33 | **0.40 s** | Keeps reasoning, so the cache survives across turns. Past 60% of the window it compacts once, only at a turn boundary, then accumulates again. |
+  | `all` | similar to `auto` | 0.35 s | Keeps everything until the history budget trims it. |
+
+  With a 4K window, where `auto` compaction fires on the real model, it passed 22/22 later turns. The quality risk of keeping reasoning is carry-over: in the failures we saw, errors or focus from an earlier turn leaked into later ones. Choose `auto` for chat UIs where first-token latency matters; keep the default for accuracy-critical flows.
+- **Per-step metrics.** Every `step-finish` event carries prefill tokens, KV reuse, prompt size, compaction, time to first token, prefill/decode throughput and grammar compile time.
 - **Small-model safeguards.**
   - Context budgeting fits history and tool output into the model's window.
   - Generation stops at `<tool_response>`, so the model can't invent tool results.
@@ -263,7 +284,13 @@ console.log(formatReport(report))   // pass rate, p50/p90 latency, TTFT, tokens,
 await evalRetrieval(ai.knowledge!, [{ query: 'guest wifi', relevant: ['wifi-doc'] }], { k: 5 })  // recall, MRR, nDCG
 ```
 
-The playground's `eval.html` runs a 9-case suite covering private RAG, SQL actions, chained steps, multi-turn and restraint. Configure it by query string: `?model=qwen3-4b&thinking=auto&constrain=1&repeats=3`.
+Multi-turn cases grade every turn (`turns: [{ input, expect }, …]`). The report adds later-turn metrics, where conversation history matters: pass rate, time to first token, prefill tokens, prompt size and KV reuse.
+
+The playground's `eval.html` runs two suites:
+- `suite=single`: 9 cases covering private RAG, SQL actions, chained steps and restraint.
+- `suite=multi`: 3 conversations of 4–5 turns.
+
+Configure by query string, e.g. `?suite=multi&history=auto&ctx=4096&repeats=3`.
 
 How the current defaults were chosen (Qwen3 4B, WebGPU, Apple silicon):
 
@@ -333,7 +360,9 @@ On Chrome with WebGPU (Apple silicon):
 
 - **Evals.** The 9-case suite passed 27/27 with the default configuration (Qwen3 4B, EmbeddingGemma, mxbai rerank).
 - **Strict privacy mode** (`pnpm dev:strict`: self-hosted models plus CSP `connect-src 'self'`). A first-visit session in a fresh profile downloaded every model, indexed a document and answered correctly. The only host it contacted was the app's own origin, with zero CSP violations. The same session in normal mode contacts huggingface.co, its CDN, cdn.jsdelivr.net and raw.githubusercontent.com.
-- **KV-cache reuse.** Steps after a tool result prefill ~250 new tokens instead of the full prompt.
+- **KV-cache reuse.** Steps after a tool result prefill ~250 new tokens instead of the full prompt. With `reasoningHistory: 'auto'`, later turns prefill ~200 tokens and start answering in 0.4 s (vs 3.2 s).
+- **Multi-turn suite.** 3 conversations × 3 repeats: 33/33 later turns with the defaults.
+- **Offline from cache** (strict mode, `127.0.0.1`). With the model host blocked after first load, the app indexed, searched, reranked and answered correctly entirely from the browser cache. `modelCache.status()` reported correct cached state before download, after download, across reload and after deletion, with zero off-origin requests.
 - **Node e2e suite.** Checks every embedding preset and the reranker against real weights, plus Qwen3 0.6B completing tool calls and RAG answers on CPU.
 
-Not yet verified: Windows/Linux GPUs, mobile browsers, Chrome built-in AI, and live Ollama / LM Studio servers (their adapters are tested against recorded protocol responses). The eval suite is small (9 cases), so treat its pass rates as directional and extend it with cases from your own domain.
+Not yet verified: Windows/Linux GPUs, mobile browsers, Chrome built-in AI, and live Ollama / LM Studio servers (their adapters are tested against recorded protocol responses). The eval suites are small (9 single-turn cases, 3 conversations), so treat pass rates as directional and extend them with cases from your own domain.

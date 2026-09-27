@@ -337,8 +337,17 @@ export function contextBudget(
   return Math.max(1500, Math.floor((contextWindow - reply) * CHARS_PER_TOKEN) - fixed)
 }
 
-const messageChars = (m: Message) =>
-  m.content.length + (m.role === 'assistant' && m.toolCalls ? JSON.stringify(m.toolCalls).length : 0) + 16
+/**
+ * Characters a message occupies in the prompt. Assistant turns replayed
+ * verbatim (with reasoning) are counted at their raw size, so keeping
+ * reasoning can't silently overflow the window.
+ */
+const messageChars = (m: Message) => {
+  if (m.role !== 'assistant') return m.content.length + 16
+  const raw = (m.providerData?.data as { raw?: unknown } | undefined)?.raw
+  const visible = m.content.length + (m.toolCalls ? JSON.stringify(m.toolCalls).length : 0)
+  return Math.max(visible, typeof raw === 'string' ? raw.length : 0) + 16
+}
 
 /**
  * `trimHistory`, then drop whole older turns until the history fits

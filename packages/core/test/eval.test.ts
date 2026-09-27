@@ -81,3 +81,36 @@ describe('evalRetrieval', () => {
   })
 })
 
+
+describe('multi-turn evals', () => {
+  it('grades every turn and reports later-turn metrics', async () => {
+    const model = mockModel([
+      { toolCalls: [{ name: 'execute_sql', input: { sql: 'create table notes (x text)' } }] },
+      'Created.',
+      'Your first note was about milk.', // turn 2 passes
+      'I do not remember.', // turn 3 fails
+    ])
+    const ai = await createEnclave({ db, model, skills: [sqlSkill()] })
+    const report = await runEval(ai, [
+      {
+        name: 'conversation',
+        setup: async (e) => void (await e.db.exec('drop table if exists notes')),
+        turns: [
+          { input: 'make a notes table', expect: { tools: ['execute_sql'] } },
+          { input: 'what was my first note?', expect: { answer: 'milk', noTools: true } },
+          { input: 'and the second?', expect: { answer: 'eggs' } },
+        ],
+      },
+    ])
+    const [result] = report.results
+    expect(result!.turns.map((t) => [t.index, t.graded, t.passed])).toEqual([
+      [0, true, true],
+      [1, true, true],
+      [2, true, false],
+    ])
+    expect(result!.passed).toBe(false)
+    expect(result!.failures).toEqual(['turn 3: answer does not match eggs'])
+    expect(report.laterTurns).toMatchObject({ count: 2, passRate: 0.5 })
+    expect(formatReport(report)).toContain('later turns (2): 50% passed')
+  })
+})

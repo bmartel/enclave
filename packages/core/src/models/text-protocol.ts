@@ -43,11 +43,17 @@ export interface TextProtocolOptions {
    */
   contextPlacement?: 'system' | 'message'
   /**
-   * `current-turn` (default) drops reasoning from earlier turns, as Qwen3's
-   * chat template does. `all` keeps it, so the engine's KV cache also
-   * survives across turns (faster) at the cost of context space.
+   * What happens to reasoning from earlier turns:
+   * - `current-turn` (default): dropped, as Qwen3's chat template does. The
+   *   KV cache is rebuilt at every new user turn.
+   * - `all`: kept, so the KV cache survives across turns, at the cost of context.
+   * - `auto`: kept until the conversation reaches `compactAt` of the context
+   *   window, then all older reasoning is dropped at once (one rebuild) and
+   *   accumulation starts again. Needs the model's `contextWindow`.
    */
-  reasoningHistory?: 'current-turn' | 'all'
+  reasoningHistory?: 'current-turn' | 'all' | 'auto'
+  /** Share of the context window that triggers compaction in `auto`. Default 0.6. */
+  compactAt?: number
 }
 
 /** Small models sometimes keep going and invent the tool's answer. Stop there. */
@@ -59,6 +65,11 @@ export function fromTextModel(model: TextModel, options: TextProtocolOptions = {
   // Exactly what each message looked like when first sent. Replaying it
   // verbatim is what lets the engine keep its KV cache between steps.
   const sent = new WeakMap<Message, string>()
+  // Assistant turns whose reasoning has been compacted away (auto mode). Once
+  // compacted a turn stays compacted, so its rendering, and the cache, stay stable.
+  const compacted = new WeakSet<Message>()
+  const mode = options.reasoningHistory ?? 'current-turn'
+  const compactChars = model.contextWindow ? model.contextWindow * 3.2 * (options.compactAt ?? 0.6) : Infinity
 
   return {
     id: model.id,
@@ -67,16 +78,33 @@ export function fromTextModel(model: TextModel, options: TextProtocolOptions = {
     async *stream(request: ModelRequest): AsyncGenerator<ModelChunk> {
       const parser = new TaggedStreamParser()
       const inlineContext = placement === 'message' ? request.context : undefined
-      let raw = ''
-      let stats: TextStats = {}
-      for await (const piece of model.streamText({
-        system: toolSystemPrompt(placement === 'system' ? request : { ...request, context: undefined }),
-        messages: renderMessages(request.messages, {
+      const system = toolSystemPrompt(placement === 'system' ? request : { ...request, context: undefined })
+      const render = () =>
+        renderMessages(request.messages, {
           provider,
           sent,
           context: inlineContext,
-          keepReasoning: options.reasoningHistory === 'all',
-        }),
+          keepReasoning: mode === 'current-turn' ? false : mode === 'all' ? true : (m) => !compacted.has(m),
+        })
+      let rendered = render()
+      let didCompact = false
+      // Only compact when a new user turn starts: within a turn the cache is
+      // always reused, and the agent's history budget guards the window.
+      const newTurn = request.messages.at(-1)?.role === 'user'
+      if (mode === 'auto' && newTurn && size(system, rendered) > compactChars) {
+        didCompact = true
+        const lastUser = request.messages.findLastIndex((m) => m.role === 'user')
+        request.messages.forEach((m, i) => {
+          if (i < lastUser && m.role === 'assistant') compacted.add(m)
+        })
+        rendered = render()
+      }
+      const promptChars = size(system, rendered)
+      let raw = ''
+      let stats: TextStats = {}
+      for await (const piece of model.streamText({
+        system,
+        messages: rendered,
         tools: request.tools,
         after: request.messages.at(-1)?.role === 'tool' ? 'tool' : 'user',
         ...(request.signal ? { signal: request.signal } : {}),
@@ -94,7 +122,7 @@ export function fromTextModel(model: TextModel, options: TextProtocolOptions = {
         type: 'finish',
         reason: parser.callCount > 0 ? 'tool-calls' : 'stop',
         ...(stats.usage ? { usage: stats.usage } : {}),
-        ...(stats.metrics ? { metrics: stats.metrics } : {}),
+        metrics: { ...stats.metrics, promptChars, ...(didCompact ? { compacted: true } : {}) },
         providerData: { provider, data: { raw } },
       }
     },
@@ -136,8 +164,8 @@ interface RenderOptions {
   sent?: WeakMap<Message, string>
   /** Live context attached to the newest message. */
   context?: string | undefined
-  /** Keep reasoning from earlier turns instead of dropping it. */
-  keepReasoning?: boolean
+  /** Keep reasoning from earlier turns (per message when a function). */
+  keepReasoning?: boolean | ((message: Message) => boolean)
 }
 
 /**
@@ -166,7 +194,8 @@ export function renderMessages(messages: Message[], options: RenderOptions = {})
     else {
       const raw = m.providerData?.provider === options.provider ? (m.providerData?.data as { raw?: string })?.raw : undefined
       if (raw !== undefined) {
-        text = i < lastUser && !options.keepReasoning ? raw.replace(THINK_BLOCK, '') : raw
+        const keep = typeof options.keepReasoning === 'function' ? options.keepReasoning(m) : !!options.keepReasoning
+        text = i < lastUser && !keep ? raw.replace(THINK_BLOCK, '') : raw
       } else {
         const calls = (m.toolCalls ?? []).map(
           (c) => `<tool_call>\n${JSON.stringify({ name: c.name, arguments: c.input ?? {} })}\n</tool_call>`,
@@ -183,6 +212,9 @@ export function renderMessages(messages: Message[], options: RenderOptions = {})
   })
   return out
 }
+
+const size = (system: string, messages: TextMessage[]) =>
+  messages.reduce((n, m) => n + m.content.length + 16, system.length)
 
 /** @deprecated Use `renderMessages`. */
 export const toTextMessages = (messages: Message[]) => renderMessages(messages)

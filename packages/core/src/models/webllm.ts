@@ -1,5 +1,5 @@
 import type { AppConfig, CompletionUsage, InitProgressReport, MLCEngineInterface } from '@mlc-ai/web-llm'
-import type { Model, ToolSpec } from '../types.js'
+import type { Downloadable, Model, ToolSpec } from '../types.js'
 import { findLLM } from '../web/catalog.js'
 import { fromTextModel, type TextMessage } from './text-protocol.js'
 import { absolute } from '../privacy/index.js'
@@ -36,10 +36,12 @@ export interface WebLLMOptions {
    */
   constrainToolCalls?: boolean
   /**
-   * `current-turn` (default) drops reasoning from earlier turns like Qwen3's
-   * template. `all` keeps it so the KV cache also survives across turns.
+   * Reasoning from earlier turns: `current-turn` (default) drops it like
+   * Qwen3's template; `all` keeps it so the KV cache survives across turns;
+   * `auto` keeps it until the conversation fills 60% of the window, then
+   * compacts once.
    */
-  reasoningHistory?: 'current-turn' | 'all'
+  reasoningHistory?: 'current-turn' | 'all' | 'auto'
   /**
    * Where to download weights and compiled model libraries from. Use
    * `selfHostedAppConfig()` to serve everything from your own origin.
@@ -48,11 +50,9 @@ export interface WebLLMOptions {
   onProgress?(report: InitProgressReport): void
 }
 
-export interface WebLLMModel extends Model {
+export interface WebLLMModel extends Model, Downloadable {
   readonly modelId: string
   readonly contextWindow: number
-  /** Download (first run) and compile the model. Called lazily on first use. */
-  load(): Promise<void>
   unload(): Promise<void>
 }
 
@@ -254,6 +254,17 @@ export function webllm(options: WebLLMOptions): WebLLMModel {
       slot.transcript = undefined
       await (await slot.engine).unload()
     },
+    // Checked against the same appConfig used to download, so self-hosted
+    // weights (cached under your URLs) are reported correctly.
+    isCached: () => isWebLLMCached(modelId, options.appConfig),
+    async clearCache() {
+      if (slot.loaded === key) {
+        slot.loaded = undefined
+        slot.transcript = undefined
+        await (await slot.engine).unload()
+      }
+      await deleteWebLLMCache(modelId, options.appConfig)
+    },
   }
 }
 
@@ -286,10 +297,24 @@ export async function selfHostedAppConfig(options: { baseUrl: string; models?: s
   }
 }
 
-/** Whether the model's weights are already in the browser cache (loads offline). */
+/**
+ * Whether the model can load offline: weights and the compiled model library
+ * are both in the browser cache. (WebLLM never caches libraries served from a
+ * `localhost` URL, so those report false: fine in development, and the reason
+ * to test offline behaviour on a real hostname.)
+ */
 export async function isWebLLMCached(model: string, appConfig?: AppConfig): Promise<boolean> {
   const lib = await import('@mlc-ai/web-llm')
-  return lib.hasModelInCache(resolveWebLLMId(model), appConfig)
+  const id = resolveWebLLMId(model)
+  if (!(await lib.hasModelInCache(id, appConfig))) return false
+  const record = (appConfig ?? lib.prebuiltAppConfig).model_list.find((r) => r.model_id === id)
+  if (!record?.model_lib) return false
+  if (typeof caches === 'undefined') return true
+  // Default Cache API backend; other backends (IndexedDB, cross-origin storage) only report weights.
+  const backend = (appConfig as { cacheBackend?: string } | undefined)?.cacheBackend
+  if (backend && backend !== 'cache') return true
+  const cache = await caches.open('webllm/wasm')
+  return (await cache.match(new Request(record.model_lib))) !== undefined
 }
 
 /** Free the disk space used by a downloaded model. */

@@ -15,6 +15,7 @@ export type Request =
   | { id: number; op: 'generate'; config: GenerateConfig; request: GenerateRequest }
   | { id: number; op: 'abort' }
   | { id: number; op: 'configure'; env: TransformersEnv }
+  | { id: number; op: 'cached' | 'clear' | 'cachedFiles'; config: EmbedConfig | RerankConfig | GenerateConfig }
 
 type WithoutId<T> = T extends unknown ? Omit<T, 'id'> : never
 
@@ -30,6 +31,9 @@ export type Response =
  */
 export interface Backend {
   configure(env: TransformersEnv): Promise<void>
+  isCached(config: EmbedConfig | RerankConfig | GenerateConfig): Promise<boolean>
+  clearCache(config: EmbedConfig | RerankConfig | GenerateConfig): Promise<void>
+  cachedFiles(config: EmbedConfig | RerankConfig | GenerateConfig): Promise<{ file: string; cached: boolean }[]>
   load(kind: 'embed' | 'rerank' | 'generate', config: EmbedConfig | RerankConfig | GenerateConfig): Promise<void>
   embed(config: EmbedConfig, texts: string[]): Promise<number[][]>
   rerank(config: RerankConfig, query: string, documents: string[]): Promise<number[]>
@@ -52,6 +56,9 @@ function localBackend(): Backend {
   const runtime = new TransformersRuntime((p) => listeners.forEach((l) => l(p)))
   return {
     configure: (env) => runtime.configure(env),
+    isCached: (config) => runtime.isCached(config),
+    clearCache: (config) => runtime.clearCache(config),
+    cachedFiles: (config) => runtime.cachedFiles(config),
     load: (kind, config) => runtime.load(kind, config),
     embed: (config, texts) => runtime.embed(config, texts),
     rerank: (config, query, documents) => runtime.rerank(config, query, documents),
@@ -90,6 +97,9 @@ function workerBackend(worker: Worker): Backend {
 
   return {
     configure: (env) => call({ op: 'configure', env }),
+    isCached: (config) => call({ op: 'cached', config }),
+    clearCache: (config) => call({ op: 'clear', config }),
+    cachedFiles: (config) => call({ op: 'cachedFiles', config }),
     load: (kind, config) => call({ op: 'load', kind, config }),
     embed: (config, texts) => call({ op: 'embed', config, texts }),
     rerank: (config, query, documents) => call({ op: 'rerank', config, query, documents }),
@@ -128,6 +138,15 @@ export function serveTransformers(): void {
       switch (data.op) {
         case 'configure':
           value = await runtime.configure(data.env)
+          break
+        case 'cached':
+          value = await runtime.isCached(data.config)
+          break
+        case 'clear':
+          value = await runtime.clearCache(data.config)
+          break
+        case 'cachedFiles':
+          value = await runtime.cachedFiles(data.config)
           break
         case 'load':
           value = await runtime.load(data.kind, data.config)

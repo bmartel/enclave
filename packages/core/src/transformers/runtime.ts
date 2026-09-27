@@ -66,6 +66,16 @@ function applyEnv(lib: TJS, env: TransformersEnv): void {
   if (env.wasmPaths !== undefined && wasm) wasm.wasmPaths = env.wasmPaths
 }
 
+/** Files Transformers.js probes for but tolerates missing. */
+const OPTIONAL_FILES = new Set([
+  'generation_config.json',
+  'preprocessor_config.json',
+  'processor_config.json',
+  'special_tokens_map.json',
+  'chat_template.jinja',
+  'chat_template.json',
+])
+
 export class TransformersRuntime {
   private lib: Promise<TJS> | undefined
   private backend: Promise<Backend> | undefined
@@ -170,6 +180,42 @@ export class TransformersRuntime {
       else if (kind === 'rerank') await this.reranker(config)
       else await this.generator(config)
     })
+  }
+
+  /**
+   * Whether every file this model needs (for the resolved dtype/device) is in
+   * the cache. Transformers.js also lists optional files that many repos don't
+   * have (e.g. generation_config.json); those are ignored here.
+   */
+  async isCached(config: LoadConfig): Promise<boolean> {
+    try {
+      const files = await this.cachedFiles(config)
+      return files.length > 0 && files.every((f) => f.cached || OPTIONAL_FILES.has(f.file))
+    } catch {
+      return false
+    }
+  }
+
+  /** Per-file cache state, for diagnostics and download UIs. */
+  async cachedFiles(config: LoadConfig): Promise<{ file: string; cached: boolean }[]> {
+    const tjs = await this.tjs()
+    const { device, dtype } = await this.resolve(config)
+    const result = await tjs.ModelRegistry.is_cached_files(config.model, { dtype: dtype as never, ...(device ? { device } : {}) })
+    return result.files
+  }
+
+  /** Remove the model's cached files and unload it. */
+  async clearCache(config: LoadConfig): Promise<void> {
+    const tjs = await this.tjs()
+    const { device, dtype } = await this.resolve(config)
+    for (const [key, entry] of this.loaded) {
+      if (!key.includes(`:${config.model}:`)) continue
+      this.loaded.delete(key)
+      const value = await entry.catch(() => undefined)
+      await value?.model?.dispose?.()
+      await value?.extractor?.dispose?.()
+    }
+    await tjs.ModelRegistry.clear_cache(config.model, { dtype: dtype as never, ...(device ? { device } : {}) })
   }
 
   embed(config: EmbedConfig, texts: string[]): Promise<number[][]> {

@@ -1,5 +1,5 @@
 import { fromTextModel } from '../models/text-protocol.js'
-import type { Embedder, EmbedKind, Model, Reranker } from '../types.js'
+import type { Downloadable, Embedder, EmbedKind, Model, Reranker } from '../types.js'
 import {
   findEmbedding,
   findLLM,
@@ -84,6 +84,8 @@ export function transformersEmbedder(options: TransformersEmbedderOptions = {}):
       return title ? `${title}\n\n${text}` : text
     },
     load: () => backend.load('embed', config),
+    isCached: () => backend.isCached(config),
+    clearCache: () => backend.clearCache(config),
   }
   if (options.preload) void embedder.load!().catch(() => undefined)
   return embedder
@@ -114,6 +116,8 @@ export function transformersReranker(options: TransformersRerankerOptions = {}):
     locality: 'device',
     rerank: (query, documents) => backend.rerank(config, query, documents),
     load: () => backend.load('rerank', config),
+    isCached: () => backend.isCached(config),
+    clearCache: () => backend.clearCache(config),
   }
   if (options.preload) void reranker.load!().catch(() => undefined)
   return reranker
@@ -132,9 +136,7 @@ export interface TransformersLLMOptions extends CommonOptions {
   thinking?: boolean
 }
 
-export interface TransformersLLM extends Model {
-  load(): Promise<void>
-}
+export interface TransformersLLM extends Model, Downloadable {}
 
 /**
  * In-browser LLM on ONNX Runtime Web. Runs on WebGPU, or on WASM where
@@ -192,7 +194,13 @@ export function transformersLLM(options: TransformersLLMOptions): TransformersLL
       signal?.throwIfAborted()
     },
   })
-  return { ...text, contextWindow, load: () => backend.load('generate', config) }
+  return {
+    ...text,
+    contextWindow,
+    load: () => backend.load('generate', config),
+    isCached: () => backend.isCached(config),
+    clearCache: () => backend.clearCache(config),
+  }
 }
 
 // ---------------------------------------------------------------------------

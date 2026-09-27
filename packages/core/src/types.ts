@@ -74,6 +74,10 @@ export interface Usage {
 export interface StepMetrics {
   /** Tokens actually prefilled this step (low when the KV cache was reused). */
   prefillTokens?: number
+  /** Size of the full prompt sent this step, in characters (context growth). */
+  promptChars?: number
+  /** Older reasoning was dropped this step to stay within the window (`reasoningHistory: 'auto'`). */
+  compacted?: boolean
   timeToFirstTokenMs?: number
   prefillTokensPerSec?: number
   decodeTokensPerSec?: number
@@ -127,6 +131,18 @@ export interface Embedder {
   formatDocument?(text: string, title?: string): string
   /** Start downloading/compiling the model ahead of first use. */
   load?(): Promise<void>
+  isCached?(): Promise<boolean>
+  clearCache?(): Promise<void>
+}
+
+/** A component whose weights are downloaded to, and cached in, the browser. */
+export interface Downloadable {
+  /** Download (first run) and initialize. */
+  load(): Promise<void>
+  /** True when every file needed to run is in the browser cache (works offline). */
+  isCached(): Promise<boolean>
+  /** Delete the cached files. */
+  clearCache(): Promise<void>
 }
 
 /** Cross-encoder that scores (query, document) relevance; higher is better. */
@@ -135,6 +151,8 @@ export interface Reranker {
   readonly locality?: Locality
   rerank(query: string, documents: string[]): Promise<number[]>
   load?(): Promise<void>
+  isCached?(): Promise<boolean>
+  clearCache?(): Promise<void>
 }
 
 // ---------------------------------------------------------------------------

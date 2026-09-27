@@ -8,33 +8,44 @@ import type { AgentEvent, ApprovalHandler, ToolCall } from '../types.js'
 
 export type AnswerMatcher = RegExp | string | ((text: string) => boolean)
 
-export interface EvalCase {
-  name: string
-  /** User turns, sent in order in a fresh thread. The last turn is graded. */
-  input: string | string[]
-  /** Prepare state (ingest documents, create tables…). Runs before every repeat. */
-  setup?(ai: Enclave): void | Promise<void>
-  expect: {
-    /** Tools that must be called (any order) during the graded turn. */
-    tools?: string[]
-    /** Tools that must not be called. */
-    forbidTools?: string[]
-    /** The graded turn must be answered without any tool call. */
-    noTools?: boolean
-    /** Final answer must match. Strings match case-insensitively as substrings. */
-    answer?: AnswerMatcher | AnswerMatcher[]
-    /** Final answer must not match (e.g. hallucinated facts). */
-    notAnswer?: AnswerMatcher | AnswerMatcher[]
-    /** Custom check: return true, or a failure message. */
-    check?(ctx: { ai: Enclave; text: string; calls: ToolCall[]; events: AgentEvent[] }): boolean | string | Promise<boolean | string>
-    /** Fail if more model steps than this were needed. */
-    maxSteps?: number
-  }
+export interface EvalExpect {
+  /** Tools that must be called (any order) during the turn. */
+  tools?: string[]
+  /** Tools that must not be called. */
+  forbidTools?: string[]
+  /** The turn must be answered without any tool call. */
+  noTools?: boolean
+  /** Answer must match. Strings match case-insensitively as substrings. */
+  answer?: AnswerMatcher | AnswerMatcher[]
+  /** Answer must not match (e.g. hallucinated facts). */
+  notAnswer?: AnswerMatcher | AnswerMatcher[]
+  /** Custom check: return true, or a failure message. */
+  check?(ctx: { ai: Enclave; text: string; calls: ToolCall[]; events: AgentEvent[] }): boolean | string | Promise<boolean | string>
+  /** Fail if more model steps than this were needed. */
+  maxSteps?: number
 }
 
-export interface CaseResult {
+export interface EvalTurn {
+  input: string
+  /** Omit to send the turn without grading it. */
+  expect?: EvalExpect
+}
+
+export interface EvalCase {
   name: string
-  repeat: number
+  /** User turns sent in order in a fresh thread; `expect` grades the last one. */
+  input?: string | string[]
+  expect?: EvalExpect
+  /** Multi-turn conversations with per-turn expectations. Takes precedence over `input`. */
+  turns?: EvalTurn[]
+  /** Prepare state (ingest documents, create tables…). Runs before every repeat. */
+  setup?(ai: Enclave): void | Promise<void>
+}
+
+export interface TurnResult {
+  index: number
+  input: string
+  graded: boolean
   passed: boolean
   failures: string[]
   text: string
@@ -42,12 +53,34 @@ export interface CaseResult {
   toolErrors: number
   steps: number
   durationMs: number
-  /** First step of the graded turn. */
+  timeToFirstTokenMs: number | undefined
+  /** Tokens actually prefilled across the turn's steps (small when the KV cache was reused). */
+  prefillTokens: number
+  outputTokens: number
+  /** Largest prompt sent during the turn, in characters. */
+  promptChars: number | undefined
+  /** Older reasoning was compacted during this turn. */
+  compacted: boolean
+  kvReuseRate: number | undefined
+}
+
+export interface CaseResult {
+  name: string
+  repeat: number
+  passed: boolean
+  failures: string[]
+  /** Final turn's answer and tool calls. */
+  text: string
+  calls: { name: string; input: unknown }[]
+  toolErrors: number
+  steps: number
+  /** Total time of graded turns. */
+  durationMs: number
   timeToFirstTokenMs: number | undefined
   prefillTokens: number
   outputTokens: number
-  /** Share of steps that continued from the engine's KV cache. */
   kvReuseRate: number | undefined
+  turns: TurnResult[]
 }
 
 export interface EvalReport {
@@ -59,6 +92,17 @@ export interface EvalReport {
   tokens: { meanOutput: number; meanPrefill: number }
   toolErrorRate: number
   kvReuseRate: number | undefined
+  /** Graded turns after the first in multi-turn cases: where conversation history matters. */
+  laterTurns:
+    | {
+        count: number
+        passRate: number
+        ttftP50Ms: number | undefined
+        meanPrefillTokens: number
+        meanPromptChars: number | undefined
+        kvReuseRate: number | undefined
+      }
+    | undefined
 }
 
 export interface EvalOptions {
@@ -91,76 +135,116 @@ export async function runEval(ai: Enclave, cases: EvalCase[], options: EvalOptio
   return summarize(options.label, results)
 }
 
+function turnsOf(testCase: EvalCase): EvalTurn[] {
+  if (testCase.turns?.length) return testCase.turns
+  const inputs = Array.isArray(testCase.input) ? testCase.input : testCase.input === undefined ? [] : [testCase.input]
+  if (!inputs.length) throw new Error(`Eval case "${testCase.name}" has no input or turns`)
+  return inputs.map((input, i) => ({ input, ...(i === inputs.length - 1 && testCase.expect ? { expect: testCase.expect } : {}) }))
+}
+
 async function runCase(ai: Enclave, testCase: EvalCase, repeat: number, options: EvalOptions): Promise<CaseResult> {
   await testCase.setup?.(ai)
-  const turns = Array.isArray(testCase.input) ? testCase.input : [testCase.input]
   const thread = ai.thread()
   const approve = options.onApproval ?? (() => true)
-  const failures: string[] = []
-  let events: AgentEvent[] = []
-  let text = ''
-  const started = performance.now()
-  let gradedStart = started
+  const turns: TurnResult[] = []
+  let aborted = false
 
   try {
-    for (const [i, turn] of turns.entries()) {
-      const graded = i === turns.length - 1
-      if (graded) gradedStart = performance.now()
-      const turnEvents: AgentEvent[] = []
-      for await (const event of thread.send(turn, { onApproval: approve, ...(options.signal ? { signal: options.signal } : {}) })) {
-        turnEvents.push(event)
+    for (const [index, turn] of turnsOf(testCase).entries()) {
+      const started = performance.now()
+      const events: AgentEvent[] = []
+      const failures: string[] = []
+      try {
+        for await (const event of thread.send(turn.input, { onApproval: approve, ...(options.signal ? { signal: options.signal } : {}) })) {
+          events.push(event)
+        }
+      } catch (error) {
+        failures.push(`error: ${error instanceof Error ? error.message : String(error)}`)
+        aborted = true
       }
-      if (graded) {
-        events = turnEvents
-        const finish = turnEvents.findLast((e) => e.type === 'finish')
-        const last = turnEvents.findLast((e) => e.type === 'message' && e.message.role === 'assistant')
-        text = last?.type === 'message' ? last.message.content : ''
-        if (finish?.type === 'finish' && finish.reason === 'max-steps') failures.push('hit maxSteps')
-      }
+      turns.push(await gradeTurn(ai, index, turn, events, failures, performance.now() - started))
+      if (aborted) break
     }
-  } catch (error) {
-    failures.push(`error: ${error instanceof Error ? error.message : String(error)}`)
   } finally {
     await thread.delete().catch(() => undefined)
   }
 
-  const calls = events.flatMap((e) => (e.type === 'tool-call' ? [e.call] : []))
-  const steps = events.filter((e) => e.type === 'step-finish')
-  const toolErrors = events.filter((e) => e.type === 'tool-result' && e.isError).length
-  const expect = testCase.expect
-  const called = new Set(calls.map((c) => c.name))
-
-  for (const name of expect.tools ?? []) if (!called.has(name)) failures.push(`did not call ${name}`)
-  for (const name of expect.forbidTools ?? []) if (called.has(name)) failures.push(`called forbidden ${name}`)
-  if (expect.noTools && calls.length) failures.push(`expected no tools, called ${[...called].join(', ')}`)
-  for (const m of list(expect.answer)) if (!matches(m, text)) failures.push(`answer does not match ${describe(m)}`)
-  for (const m of list(expect.notAnswer)) if (matches(m, text)) failures.push(`answer matches forbidden ${describe(m)}`)
-  if (expect.maxSteps !== undefined && steps.length > expect.maxSteps) failures.push(`${steps.length} steps > ${expect.maxSteps}`)
-  if (expect.check && !failures.some((f) => f.startsWith('error'))) {
-    try {
-      const verdict = await expect.check({ ai, text, calls, events })
-      if (verdict !== true) failures.push(typeof verdict === 'string' ? verdict : 'check failed')
-    } catch (error) {
-      failures.push(`check threw: ${error instanceof Error ? error.message : String(error)}`)
-    }
-  }
-
-  const metrics = steps.flatMap((s) => (s.type === 'step-finish' && s.metrics ? [s.metrics] : []))
-  const withReuse = metrics.filter((m) => m.kvCacheReused !== undefined)
-  const first = steps[0]
+  const graded = turns.filter((t) => t.graded)
+  const last = turns.at(-1)
+  const reuse = graded.flatMap((t) => (t.kvReuseRate === undefined ? [] : [t.kvReuseRate]))
+  const ttfts = graded.flatMap((t) => (t.timeToFirstTokenMs === undefined ? [] : [t.timeToFirstTokenMs]))
+  const multi = turns.length > 1
   return {
     name: testCase.name,
     repeat,
+    passed: graded.length > 0 && graded.every((t) => t.passed) && !aborted,
+    failures: graded.flatMap((t) => t.failures.map((f) => (multi ? `turn ${t.index + 1}: ${f}` : f))),
+    text: last?.text ?? '',
+    calls: last?.calls ?? [],
+    toolErrors: graded.reduce((n, t) => n + t.toolErrors, 0),
+    steps: graded.reduce((n, t) => n + t.steps, 0),
+    durationMs: Math.round(graded.reduce((n, t) => n + t.durationMs, 0)),
+    timeToFirstTokenMs: ttfts.length ? Math.round(mean(ttfts)) : undefined,
+    prefillTokens: graded.reduce((n, t) => n + t.prefillTokens, 0),
+    outputTokens: graded.reduce((n, t) => n + t.outputTokens, 0),
+    kvReuseRate: reuse.length ? mean(reuse) : undefined,
+    turns,
+  }
+}
+
+async function gradeTurn(
+  ai: Enclave,
+  index: number,
+  turn: EvalTurn,
+  events: AgentEvent[],
+  failures: string[],
+  durationMs: number,
+): Promise<TurnResult> {
+  const calls = events.flatMap((e) => (e.type === 'tool-call' ? [e.call] : []))
+  const steps = events.flatMap((e) => (e.type === 'step-finish' ? [e] : []))
+  const finish = events.findLast((e) => e.type === 'finish')
+  const last = events.findLast((e) => e.type === 'message' && e.message.role === 'assistant')
+  const text = last?.type === 'message' ? last.message.content : ''
+  const expect = turn.expect
+
+  if (expect) {
+    if (finish?.type === 'finish' && finish.reason === 'max-steps') failures.push('hit maxSteps')
+    const called = new Set(calls.map((c) => c.name))
+    for (const name of expect.tools ?? []) if (!called.has(name)) failures.push(`did not call ${name}`)
+    for (const name of expect.forbidTools ?? []) if (called.has(name)) failures.push(`called forbidden ${name}`)
+    if (expect.noTools && calls.length) failures.push(`expected no tools, called ${[...called].join(', ')}`)
+    for (const m of list(expect.answer)) if (!matches(m, text)) failures.push(`answer does not match ${describe(m)}`)
+    for (const m of list(expect.notAnswer)) if (matches(m, text)) failures.push(`answer matches forbidden ${describe(m)}`)
+    if (expect.maxSteps !== undefined && steps.length > expect.maxSteps) failures.push(`${steps.length} steps > ${expect.maxSteps}`)
+    if (expect.check && !failures.some((f) => f.startsWith('error'))) {
+      try {
+        const verdict = await expect.check({ ai, text, calls, events })
+        if (verdict !== true) failures.push(typeof verdict === 'string' ? verdict : 'check failed')
+      } catch (error) {
+        failures.push(`check threw: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+  }
+
+  const metrics = steps.flatMap((s) => (s.metrics ? [s.metrics] : []))
+  const withReuse = metrics.filter((m) => m.kvCacheReused !== undefined)
+  const promptSizes = metrics.flatMap((m) => (m.promptChars === undefined ? [] : [m.promptChars]))
+  return {
+    index,
+    input: turn.input,
+    graded: !!expect,
     passed: failures.length === 0,
     failures,
     text,
     calls: calls.map((c) => ({ name: c.name, input: c.input })),
-    toolErrors,
+    toolErrors: events.filter((e) => e.type === 'tool-result' && e.isError).length,
     steps: steps.length,
-    durationMs: Math.round(performance.now() - gradedStart),
-    timeToFirstTokenMs: first?.type === 'step-finish' ? first.metrics?.timeToFirstTokenMs : undefined,
-    prefillTokens: steps.reduce((n, s) => n + (s.type === 'step-finish' ? (s.usage?.inputTokens ?? 0) : 0), 0),
-    outputTokens: steps.reduce((n, s) => n + (s.type === 'step-finish' ? (s.usage?.outputTokens ?? 0) : 0), 0),
+    durationMs: Math.round(durationMs),
+    timeToFirstTokenMs: steps[0]?.metrics?.timeToFirstTokenMs,
+    prefillTokens: steps.reduce((n, s) => n + (s.usage?.inputTokens ?? 0), 0),
+    outputTokens: steps.reduce((n, s) => n + (s.usage?.outputTokens ?? 0), 0),
+    promptChars: promptSizes.length ? Math.max(...promptSizes) : undefined,
+    compacted: metrics.some((m) => m.compacted),
     kvReuseRate: withReuse.length ? withReuse.filter((m) => m.kvCacheReused).length / withReuse.length : undefined,
   }
 }
@@ -171,6 +255,12 @@ function summarize(label: string | undefined, results: CaseResult[]): EvalReport
   const ttfts = results.flatMap((r) => (r.timeToFirstTokenMs === undefined ? [] : [r.timeToFirstTokenMs])).sort((a, b) => a - b)
   const reuse = results.flatMap((r) => (r.kvReuseRate === undefined ? [] : [r.kvReuseRate]))
   const steps = results.reduce((n, r) => n + r.steps, 0)
+
+  const later = results.flatMap((r) => r.turns.filter((t) => t.graded && t.index > 0))
+  const laterTtft = later.flatMap((t) => (t.timeToFirstTokenMs === undefined ? [] : [t.timeToFirstTokenMs])).sort((a, b) => a - b)
+  const laterPrompt = later.flatMap((t) => (t.promptChars === undefined ? [] : [t.promptChars]))
+  const laterReuse = later.flatMap((t) => (t.kvReuseRate === undefined ? [] : [t.kvReuseRate]))
+
   return {
     label,
     passRate: rate(results.filter((r) => r.passed).length, results.length),
@@ -196,6 +286,16 @@ function summarize(label: string | undefined, results: CaseResult[]): EvalReport
     },
     toolErrorRate: rate(results.reduce((n, r) => n + r.toolErrors, 0), Math.max(steps, 1)),
     kvReuseRate: reuse.length ? mean(reuse) : undefined,
+    laterTurns: later.length
+      ? {
+          count: later.length,
+          passRate: rate(later.filter((t) => t.passed).length, later.length),
+          ttftP50Ms: laterTtft.length ? percentile(laterTtft, 0.5) : undefined,
+          meanPrefillTokens: Math.round(mean(later.map((t) => t.prefillTokens))),
+          meanPromptChars: laterPrompt.length ? Math.round(mean(laterPrompt)) : undefined,
+          kvReuseRate: laterReuse.length ? mean(laterReuse) : undefined,
+        }
+      : undefined,
   }
 }
 
@@ -207,10 +307,23 @@ export function formatReport(report: EvalReport): string {
       (report.latency.ttftP50Ms !== undefined ? ` · TTFT p50 ${report.latency.ttftP50Ms}ms` : '') +
       ` · ${report.tokens.meanOutput} out tok/case` +
       (report.kvReuseRate !== undefined ? ` · KV reuse ${pct(report.kvReuseRate)}` : ''),
-    ...report.byCase.map(
-      (c) => `  ${c.passRate === 1 ? '✓' : c.passRate === 0 ? '✗' : '~'} ${c.name.padEnd(32)} ${pct(c.passRate).padStart(4)}  ${(c.meanMs / 1000).toFixed(1)}s${c.failures.length ? `  ${c.failures.join('; ')}` : ''}`,
-    ),
   ]
+  const later = report.laterTurns
+  if (later) {
+    lines.push(
+      `  later turns (${later.count}): ${pct(later.passRate)} passed` +
+        (later.ttftP50Ms !== undefined ? ` · TTFT p50 ${later.ttftP50Ms}ms` : '') +
+        ` · ${later.meanPrefillTokens} prefill tok/turn` +
+        (later.meanPromptChars !== undefined ? ` · prompt ${later.meanPromptChars} chars` : '') +
+        (later.kvReuseRate !== undefined ? ` · KV reuse ${pct(later.kvReuseRate)}` : ''),
+    )
+  }
+  lines.push(
+    ...report.byCase.map(
+      (c) =>
+        `  ${c.passRate === 1 ? '✓' : c.passRate === 0 ? '✗' : '~'} ${c.name.padEnd(32)} ${pct(c.passRate).padStart(4)}  ${(c.meanMs / 1000).toFixed(1)}s${c.failures.length ? `  ${c.failures.join('; ')}` : ''}`,
+    ),
+  )
   return lines.join('\n')
 }
 

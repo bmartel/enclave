@@ -1,7 +1,6 @@
 import type { Model, Thread, ToolCall } from '@enclave/core'
 import { chromeAI, chromeAIAvailable } from '@enclave/core/models/chrome'
 import { discoverLocalModels, localModel, lmstudio, ollama, type LocalModelInfo } from '@enclave/core/models/local'
-import { deleteWebLLMCache, isWebLLMCached } from '@enclave/core/models/webllm'
 import { knowledgeSkill, memorySkill, sqlSkill } from '@enclave/core/skills'
 import {
   BROWSER_LLMS,
@@ -120,13 +119,9 @@ let chromeAvailable = false
 async function renderModelOptions() {
   const fits = new Set(rankLLMs(device).map((c) => c.preset.id))
   const recommended = recommendLLM(device)?.preset.id
-  const cached = new Map(
-    await Promise.all(
-      BROWSER_LLMS.filter((p) => p.runtime === 'webllm').map(
-        async (p) => [p.id, await isWebLLMCached(resolveLLM(p, device).modelId).catch(() => false)] as const,
-      ),
-    ),
-  )
+  const status = await ai.modelCache.status()
+  const cached = new Map(status.filter((e) => e.kind === 'llm').map((e) => [e.id, e.cached]))
+  markRetrievalCache(status)
 
   const group = (label: string, options: HTMLOptionElement[]) => {
     if (!options.length) return undefined
@@ -192,7 +187,7 @@ function describeSelection() {
     info.textContent = `${preset.params} params · ~${(choice.estimatedMB / 1024).toFixed(1)} GB GPU memory · ${choice.modelId}${
       preset.notes ? ` · ${preset.notes}` : ''
     }`
-    forget.hidden = preset.runtime !== 'webllm'
+    forget.hidden = false
     load.hidden = false
   } else if (selection === 'chrome') {
     info.textContent = 'On-device Gemini Nano managed by Chrome.'
@@ -243,7 +238,7 @@ $('load').onclick = async () => {
 $('forget').onclick = async () => {
   if (!selection.startsWith('browser:')) return
   const preset = BROWSER_LLMS.find((p) => p.id === selection.slice(8))!
-  await deleteWebLLMCache(resolveLLM(preset, device).modelId)
+  await ai.modelCache.clear('llm', preset.id)
   setStatus(`Deleted cached weights for ${preset.label}`)
   await renderModelOptions()
 }
@@ -271,6 +266,16 @@ embeddingSelect.value = stored('embedding', 'auto')
 embeddingSelect.onchange = () => {
   store('embedding', embeddingSelect.value)
   location.reload()
+}
+
+/** Append ✓ cached to embedding/reranker options that are fully downloaded. */
+function markRetrievalCache(status: Awaited<ReturnType<typeof ai.modelCache.status>>) {
+  for (const [select, kind] of [[embeddingSelect, 'embedding'], [rerankerSelect, 'reranker']] as const) {
+    for (const option of select.options) {
+      const entry = status.find((e) => e.kind === kind && e.id === option.value)
+      option.textContent = option.textContent!.replace(/ · ✓ cached$/, '') + (entry?.cached ? ' · ✓ cached' : '')
+    }
+  }
 }
 
 const rerankerSelect = $<HTMLSelectElement>('reranker')
