@@ -42,6 +42,7 @@ export function anthropic(options: AnthropicOptions = {}): Model {
 
   return {
     id: `anthropic:${model}`,
+    locality: 'remote',
     async *stream(request: ModelRequest): AsyncGenerator<ModelChunk> {
       const system: BetaTextBlockParam[] = [
         { type: 'text', text: request.system, cache_control: { type: 'ephemeral' } },

@@ -1,6 +1,7 @@
 import type { FinishReason, Message, Model, ModelChunk, ModelRequest, ToolCall } from '../types.js'
 import { fromTextModel } from './text-protocol.js'
 import { sseData } from './sse.js'
+import { localityOfUrl } from '../privacy/index.js'
 
 export interface OpenAICompatibleOptions {
   /** e.g. `http://localhost:11434/v1` (Ollama), `http://localhost:1234/v1` (LM Studio), `https://api.openai.com/v1`. */
@@ -27,9 +28,11 @@ export interface OpenAICompatibleOptions {
  */
 export function openaiCompatible(options: OpenAICompatibleOptions): Model {
   const id = `openai-compatible:${options.model}`
+  const locality = localityOfUrl(options.baseURL)
   if (options.toolMode === 'prompt') {
     return fromTextModel({
       id,
+      locality,
       async *streamText({ system, messages, signal }) {
         const body = {
           messages: [{ role: 'system', content: system }, ...messages],
@@ -44,6 +47,7 @@ export function openaiCompatible(options: OpenAICompatibleOptions): Model {
 
   return {
     id,
+    locality,
     async *stream(request: ModelRequest): AsyncGenerator<ModelChunk> {
       const body: Record<string, unknown> = {
         messages: toOpenAIMessages(request),

@@ -61,3 +61,19 @@ describe('model selection', () => {
     expect(resolveLLM(findLLM('tjs-lfm2-1.2b')!, device({}))).toMatchObject({ modelId: 'onnx-community/LFM2-1.2B-ONNX', dtype: 'q4f16' })
   })
 })
+
+describe('tool-call grammar', () => {
+  it('builds an xgrammar structural tag per tool', async () => {
+    const { toolCallStructuralTag } = await import('../src/models/webllm.js')
+    const tag = toolCallStructuralTag([
+      { name: 'execute_sql', description: '', inputSchema: { type: 'object', properties: { sql: { type: 'string' } }, required: ['sql'] } },
+    ]) as any
+    expect(tag.format.triggers).toEqual(['<tool_call>'])
+    expect(tag.format.tags[0]).toEqual({
+      type: 'tag',
+      begin: '<tool_call>\n{"name": "execute_sql", "arguments": ',
+      content: { type: 'json_schema', json_schema: { type: 'object', properties: { sql: { type: 'string' } }, required: ['sql'] } },
+      end: '}\n</tool_call>',
+    })
+  })
+})

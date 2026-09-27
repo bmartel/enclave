@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "pnpm --filter @enclave/core build && vite",
     "build": "vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "dev:strict": "pnpm --filter @enclave/core build && vite --config vite.strict.config.ts",
+    "mirror": "enclave-mirror --out public/models --webllm qwen3-0.6b --webllm qwen3-4b --embedding embeddinggemma --reranker mxbai-rerank-xsmall --ort"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

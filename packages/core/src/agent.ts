@@ -10,6 +10,7 @@ import type {
   FinishReason,
   Message,
   Model,
+  StepMetrics,
   ToolCall,
   ToolMessage,
   ToolSpec,
@@ -20,8 +21,10 @@ import { drain, safeStringify, truncate } from './util.js'
 
 export const ACTIVATE_SKILL = 'activate_skill'
 
-export const DEFAULT_SYSTEM = `You are an AI assistant embedded in an application. You run next to the user's data, which never leaves their device unless a tool says otherwise.
-Use your tools to look things up instead of guessing. When a tool returns an error, read it, correct your call, and try again.
+export const DEFAULT_SYSTEM = `You are an AI assistant built into this application. You run on the user's device, and their data stays here.
+- Answer general questions (writing, translation, explanations, reasoning) directly from your own knowledge.
+- Use tools for anything about the user's own data, or anything that requires an action. You are authorized to use every tool you are given: when asked to create, change or look something up, do it by calling the tool instead of describing how.
+- If a tool returns an error, read it, fix your call, and try again.
 Be concise.`
 
 interface ToolEntry {
@@ -111,6 +114,9 @@ export async function* runAgent(rt: AgentRuntime, state: RunState): AsyncGenerat
     const calls: ToolCall[] = []
     let reason: FinishReason = 'stop'
     let providerData: AssistantMessage['providerData']
+    let stepUsage: Usage | undefined
+    let metrics: StepMetrics | undefined
+    const stepStarted = performance.now()
 
     try {
       for await (const chunk of rt.model.stream({
@@ -135,6 +141,8 @@ export async function* runAgent(rt: AgentRuntime, state: RunState): AsyncGenerat
           case 'finish':
             reason = chunk.reason
             providerData = chunk.providerData
+            stepUsage = chunk.usage
+            metrics = chunk.metrics
             if (chunk.usage) {
               usage.inputTokens += chunk.usage.inputTokens
               usage.outputTokens += chunk.usage.outputTokens
@@ -155,6 +163,14 @@ export async function* runAgent(rt: AgentRuntime, state: RunState): AsyncGenerat
     if (providerData) assistant.providerData = providerData
     state.history.push(assistant)
     yield { type: 'message', message: assistant }
+    yield {
+      type: 'step-finish',
+      step,
+      reason,
+      durationMs: performance.now() - stepStarted,
+      ...(stepUsage ? { usage: stepUsage } : {}),
+      ...(metrics ? { metrics } : {}),
+    }
 
     if (!calls.length) {
       yield { type: 'finish', reason, steps: step, usage }

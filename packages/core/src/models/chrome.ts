@@ -41,6 +41,7 @@ export async function chromeAIAvailable(): Promise<boolean> {
 export function chromeAI(options: ChromeAIOptions = {}): Model {
   return fromTextModel({
     id: 'chrome:built-in',
+    locality: 'device',
     async *streamText({ system, messages, signal }) {
       const lm = api()
       if (!lm) throw new Error('Chrome built-in AI (LanguageModel) is not available in this browser')

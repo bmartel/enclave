@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Enclave Evals</title>
+    <link rel="icon" href="data:," />
+    <style>
+      body { font: 14px/1.5 system-ui, sans-serif; margin: 0; padding: 1rem 1.5rem; background: #f7f7f5; color: #1d1d1f; }
+      pre { background: #fff; border: 1px solid #e3e3e0; border-radius: 8px; padding: 1rem; white-space: pre-wrap; }
+      code { background: #fff; padding: 0 0.3rem; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>Enclave evals</h1>
+    <p>Runs the suite in <code>src/eval-suite.ts</code> entirely in this tab. Configure with query params, e.g.
+      <code>?model=qwen3-4b&amp;thinking=auto&amp;history=all&amp;constrain=1&amp;repeats=3</code></p>
+    <pre id="status">starting…</pre>
+    <pre id="report"></pre>
+    <script type="module" src="/src/eval-page.ts"></script>
+  </body>
+</html>

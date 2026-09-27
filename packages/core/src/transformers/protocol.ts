@@ -5,6 +5,7 @@ import {
   type GenerateRequest,
   type LoadProgress,
   type RerankConfig,
+  type TransformersEnv,
 } from './runtime.js'
 
 export type Request =
@@ -13,6 +14,7 @@ export type Request =
   | { id: number; op: 'rerank'; config: RerankConfig; query: string; documents: string[] }
   | { id: number; op: 'generate'; config: GenerateConfig; request: GenerateRequest }
   | { id: number; op: 'abort' }
+  | { id: number; op: 'configure'; env: TransformersEnv }
 
 type WithoutId<T> = T extends unknown ? Omit<T, 'id'> : never
 
@@ -27,6 +29,7 @@ export type Response =
  * Every client built on the same worker shares one runtime and one model cache.
  */
 export interface Backend {
+  configure(env: TransformersEnv): Promise<void>
   load(kind: 'embed' | 'rerank' | 'generate', config: EmbedConfig | RerankConfig | GenerateConfig): Promise<void>
   embed(config: EmbedConfig, texts: string[]): Promise<number[][]>
   rerank(config: RerankConfig, query: string, documents: string[]): Promise<number[]>
@@ -48,6 +51,7 @@ function localBackend(): Backend {
   const listeners = new Set<(p: LoadProgress) => void>()
   const runtime = new TransformersRuntime((p) => listeners.forEach((l) => l(p)))
   return {
+    configure: (env) => runtime.configure(env),
     load: (kind, config) => runtime.load(kind, config),
     embed: (config, texts) => runtime.embed(config, texts),
     rerank: (config, query, documents) => runtime.rerank(config, query, documents),
@@ -85,6 +89,7 @@ function workerBackend(worker: Worker): Backend {
     })
 
   return {
+    configure: (env) => call({ op: 'configure', env }),
     load: (kind, config) => call({ op: 'load', kind, config }),
     embed: (config, texts) => call({ op: 'embed', config, texts }),
     rerank: (config, query, documents) => call({ op: 'rerank', config, query, documents }),
@@ -121,6 +126,9 @@ export function serveTransformers(): void {
     try {
       let value: unknown
       switch (data.op) {
+        case 'configure':
+          value = await runtime.configure(data.env)
+          break
         case 'load':
           value = await runtime.load(data.kind, data.config)
           break

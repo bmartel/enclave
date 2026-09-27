@@ -45,6 +45,7 @@ export function sqlSkill(options: SqlSkillOptions = {}) {
     instructions: `You have a Postgres 17 database (PGlite) running locally in the user's browser. Visible schemas: ${schemas.join(', ')}.
 - The pgvector extension is available (use <=> for cosine distance).
 - Primary keys: "id bigint primary key generated always as identity". Prefer text over varchar.
+- When the user asks to create, change or query data, run the SQL with execute_sql. Never just show SQL for the user to run.
 - Always add a LIMIT to exploratory queries (default 5, max ${maxRows}).
 - Check the current state section or call describe_schema before writing queries against tables you haven't seen.${
       readOnly ? '\n- The database is read-only: only SELECT queries are allowed.' : ''

@@ -2,12 +2,14 @@ import { DEFAULT_SYSTEM, runAgent, SkillRegistry, type AgentRuntime } from './ag
 import { Knowledge, type KnowledgeOptions } from './rag/knowledge.js'
 import type { Skill } from './skill.js'
 import { CORE_MIGRATIONS, migrate } from './store/migrate.js'
+import { assertLocality } from './privacy/index.js'
 import type {
   AgentEvent,
   ApprovalHandler,
   Db,
   Embedder,
   FinishReason,
+  Locality,
   Message,
   Model,
   Reranker,
@@ -34,6 +36,18 @@ export interface EnclaveOptions {
   /** Default handler for tools with `needsApproval`. Without one, such calls are denied. */
   onApproval?: ApprovalHandler
   knowledge?: KnowledgeOptions
+  privacy?: PrivacyPolicy
+}
+
+export interface PrivacyPolicy {
+  /**
+   * The furthest a model, embedder or reranker may process data.
+   * - `device`: in the browser, or a server on this machine (Ollama on localhost)
+   * - `local-network` (default): also servers on private addresses you control
+   * - `remote`: internet services; opt in explicitly
+   * Components that don't declare a locality count as `remote`.
+   */
+  allow?: Locality
 }
 
 export interface RunOptions {
@@ -210,6 +224,8 @@ export class Enclave {
     readonly db: Db,
     readonly knowledge: Knowledge | undefined,
     runtime: AgentRuntime,
+    /** The locality ceiling enforced for every model, embedder and reranker. */
+    readonly privacy: Required<PrivacyPolicy> = { allow: 'local-network' },
   ) {
     this.runtime = runtime
   }
@@ -220,6 +236,7 @@ export class Enclave {
 
   /** Swap the model at runtime (e.g. local → remote when online). */
   setModel(model: Model): void {
+    assertLocality(`Model ${model.id}`, model.locality, this.privacy.allow)
     this.runtime.model = model
   }
 
@@ -291,6 +308,10 @@ async function installSkill(enclave: Enclave, skill: Skill): Promise<void> {
 
 export async function createEnclave(options: EnclaveOptions): Promise<Enclave> {
   const { db, embedder } = options
+  const privacy = { allow: options.privacy?.allow ?? 'local-network' }
+  assertLocality(`Model ${options.model.id}`, options.model.locality, privacy.allow)
+  if (embedder) assertLocality(`Embedder ${embedder.id}`, embedder.locality, privacy.allow)
+  if (options.reranker) assertLocality(`Reranker ${options.reranker.id}`, options.reranker.locality, privacy.allow)
   await migrate(db, 'core', CORE_MIGRATIONS)
 
   const knowledge = embedder
@@ -309,7 +330,7 @@ export async function createEnclave(options: EnclaveOptions): Promise<Enclave> {
     maxHistory: options.maxHistory ?? 40,
     maxToolOutputChars: options.maxToolOutputChars ?? 12_000,
     onApproval: options.onApproval,
-  })
+  }, privacy)
   for (const skill of options.skills ?? []) await enclave.use(skill)
   return enclave
 }

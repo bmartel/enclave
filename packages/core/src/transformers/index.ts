@@ -10,7 +10,7 @@ import {
 import { backendFor } from './protocol.js'
 import type { DevicePreference, DtypeSpec, LoadProgress } from './runtime.js'
 
-export type { LoadProgress, DevicePreference, DtypeSpec } from './runtime.js'
+export type { LoadProgress, DevicePreference, DtypeSpec, TransformersEnv } from './runtime.js'
 export { TransformersRuntime } from './runtime.js'
 
 interface CommonOptions {
@@ -20,6 +20,15 @@ interface CommonOptions {
   /** Override the preset's dtype (e.g. `q8`, `q4`, `q4f16`, `fp16`, `fp32`). */
   dtype?: DtypeSpec
   onProgress?(progress: LoadProgress): void
+}
+
+/**
+ * Point Transformers.js (in `worker`, or this thread) at your own model host
+ * and ONNX Runtime WASM. Call before creating embedders/rerankers/LLMs.
+ * `selfHostedTransformers()` from `@enclave/core/privacy` builds the settings.
+ */
+export function configureTransformers(env: import('./runtime.js').TransformersEnv, worker?: Worker): Promise<void> {
+  return backendFor(worker).configure(env)
 }
 
 // ---------------------------------------------------------------------------
@@ -62,6 +71,7 @@ export function transformersEmbedder(options: TransformersEmbedderOptions = {}):
 
   const embedder: Embedder = {
     id: `transformers:${preset.model}@${dimensions}`,
+    locality: 'device',
     dimensions,
     embed(texts: string[], kind: EmbedKind) {
       const prefixed = kind === 'query' && preset.queryPrefix ? texts.map((t) => preset.queryPrefix + t) : texts
@@ -101,6 +111,7 @@ export function transformersReranker(options: TransformersRerankerOptions = {}):
   }
   const reranker: Reranker = {
     id: `transformers:${preset.model}`,
+    locality: 'device',
     rerank: (query, documents) => backend.rerank(config, query, documents),
     load: () => backend.load('rerank', config),
   }
@@ -149,6 +160,7 @@ export function transformersLLM(options: TransformersLLMOptions): TransformersLL
 
   const text = fromTextModel({
     id: `transformers:${model}`,
+    locality: 'device',
     async *streamText({ system, messages, signal, stop }) {
       // Bridge the callback-based stream into an async iterator.
       const queue: string[] = []

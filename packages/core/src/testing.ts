@@ -19,6 +19,7 @@ export function mockModel(script: ScriptedTurn[]): MockModel {
   let turn = 0
   return {
     id: 'mock',
+    locality: 'device',
     requests,
     async *stream(request): AsyncGenerator<ModelChunk> {
       requests.push(structuredClone({ ...request, signal: undefined }))
@@ -47,6 +48,7 @@ export function mockModel(script: ScriptedTurn[]): MockModel {
 export function hashEmbedder(dimensions = 64): Embedder {
   return {
     id: `hash-${dimensions}`,
+    locality: 'device',
     dimensions,
     async embed(texts) {
       return texts.map((text) => {

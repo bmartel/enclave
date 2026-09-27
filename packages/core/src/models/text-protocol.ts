@@ -1,5 +1,27 @@
-import type { Message, Model, ModelChunk, ModelRequest, ToolCall, ToolSpec } from '../types.js'
-import { safeStringify } from '../util.js'
+import type { Locality, Message, Model, ModelChunk, ModelRequest, StepMetrics, ToolCall, ToolSpec, Usage } from '../types.js'
+
+export interface TextMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface TextRequest {
+  system: string
+  messages: TextMessage[]
+  /** Offered tools, for backends that can constrain decoding to valid calls. */
+  tools: ToolSpec[]
+  /** What the model is responding to: a new user request, or tool results mid-turn. */
+  after: 'user' | 'tool'
+  signal?: AbortSignal
+  /** Stop sequences; backends that support them should end generation early. */
+  stop?: string[]
+}
+
+/** Backends may report usage/timing after the text stream. */
+export interface TextStats {
+  usage?: Usage
+  metrics?: StepMetrics
+}
 
 /**
  * A plain text-in/text-out chat model. `fromTextModel` layers tool calling on
@@ -8,37 +30,73 @@ import { safeStringify } from '../util.js'
  */
 export interface TextModel {
   readonly id: string
-  streamText(request: {
-    system: string
-    messages: { role: 'user' | 'assistant'; content: string }[]
-    signal?: AbortSignal
-    /** Stop sequences; backends that support them should end generation early. */
-    stop?: string[]
-  }): AsyncIterable<string>
   readonly contextWindow?: number
+  readonly locality?: Locality
+  streamText(request: TextRequest): AsyncIterable<string | TextStats>
+}
+
+export interface TextProtocolOptions {
+  /**
+   * Where per-step live context goes. `message` (default) keeps the system
+   * prompt byte-stable and attaches context to the newest message, so engines
+   * with prefix KV reuse (WebLLM) only prefill what is new each step.
+   */
+  contextPlacement?: 'system' | 'message'
+  /**
+   * `current-turn` (default) drops reasoning from earlier turns, as Qwen3's
+   * chat template does. `all` keeps it, so the engine's KV cache also
+   * survives across turns (faster) at the cost of context space.
+   */
+  reasoningHistory?: 'current-turn' | 'all'
 }
 
 /** Small models sometimes keep going and invent the tool's answer. Stop there. */
 export const TOOL_STOP = ['<tool_response>']
 
-export function fromTextModel(model: TextModel): Model {
+export function fromTextModel(model: TextModel, options: TextProtocolOptions = {}): Model {
+  const provider = `text:${model.id}`
+  const placement = options.contextPlacement ?? 'message'
+  // Exactly what each message looked like when first sent. Replaying it
+  // verbatim is what lets the engine keep its KV cache between steps.
+  const sent = new WeakMap<Message, string>()
+
   return {
     id: model.id,
     ...(model.contextWindow ? { contextWindow: model.contextWindow } : {}),
+    ...(model.locality ? { locality: model.locality } : {}),
     async *stream(request: ModelRequest): AsyncGenerator<ModelChunk> {
       const parser = new TaggedStreamParser()
-      for await (const delta of model.streamText({
-        system: toolSystemPrompt(request),
-        messages: toTextMessages(request.messages),
+      const inlineContext = placement === 'message' ? request.context : undefined
+      let raw = ''
+      let stats: TextStats = {}
+      for await (const piece of model.streamText({
+        system: toolSystemPrompt(placement === 'system' ? request : { ...request, context: undefined }),
+        messages: renderMessages(request.messages, {
+          provider,
+          sent,
+          context: inlineContext,
+          keepReasoning: options.reasoningHistory === 'all',
+        }),
+        tools: request.tools,
+        after: request.messages.at(-1)?.role === 'tool' ? 'tool' : 'user',
         ...(request.signal ? { signal: request.signal } : {}),
         ...(request.tools.length ? { stop: TOOL_STOP } : {}),
       })) {
-        yield* parser.push(delta)
+        if (typeof piece !== 'string') {
+          stats = piece
+          continue
+        }
+        raw += piece
+        yield* parser.push(piece)
       }
-      const tail = parser.flush()
-      yield* tail
-      const hasCalls = parser.callCount > 0
-      yield { type: 'finish', reason: hasCalls ? 'tool-calls' : 'stop' }
+      yield* parser.flush()
+      yield {
+        type: 'finish',
+        reason: parser.callCount > 0 ? 'tool-calls' : 'stop',
+        ...(stats.usage ? { usage: stats.usage } : {}),
+        ...(stats.metrics ? { metrics: stats.metrics } : {}),
+        providerData: { provider, data: { raw } },
+      }
     },
   }
 }
@@ -66,31 +124,68 @@ ${lines.join('\n')}
 For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
 <tool_call>
 {"name": <function-name>, "arguments": <args-json-object>}
-</tool_call>
-After emitting tool calls, stop and wait: results arrive in <tool_response> tags in the next user turn.`
+</tool_call>`
 }
 
-/** Flatten tool traffic into user/assistant text turns, merging consecutive same-role turns. */
-export function toTextMessages(messages: Message[]): { role: 'user' | 'assistant'; content: string }[] {
-  const out: { role: 'user' | 'assistant'; content: string }[] = []
-  const push = (role: 'user' | 'assistant', content: string) => {
+const THINK_BLOCK = /<think>[\s\S]*?<\/think>\s*/g
+
+interface RenderOptions {
+  /** Replay assistant turns produced by this provider verbatim. */
+  provider?: string
+  /** Cache of as-sent renderings; new entries are recorded for the trailing message(s). */
+  sent?: WeakMap<Message, string>
+  /** Live context attached to the newest message. */
+  context?: string | undefined
+  /** Keep reasoning from earlier turns instead of dropping it. */
+  keepReasoning?: boolean
+}
+
+/**
+ * Flatten tool traffic into user/assistant text turns (Qwen/Hermes layout).
+ * Reasoning is kept for the current turn and dropped from earlier ones,
+ * matching how Qwen3 was trained.
+ */
+export function renderMessages(messages: Message[], options: RenderOptions = {}): TextMessage[] {
+  const lastUser = messages.findLastIndex((m) => m.role === 'user')
+  // Messages after the last assistant turn form the new input this step.
+  const trailingStart = messages.findLastIndex((m) => m.role === 'assistant') + 1
+  const out: TextMessage[] = []
+  const push = (role: TextMessage['role'], content: string) => {
     const last = out.at(-1)
     if (last?.role === role) last.content += `\n${content}`
     else out.push({ role, content })
   }
-  for (const m of messages) {
-    if (m.role === 'user') push('user', m.content)
-    else if (m.role === 'assistant') {
-      const calls = (m.toolCalls ?? []).map(
-        (c) => `<tool_call>\n${JSON.stringify({ name: c.name, arguments: c.input })}\n</tool_call>`,
-      )
-      push('assistant', [m.content, ...calls].filter(Boolean).join('\n') || '(no output)')
-    } else {
-      push('user', `<tool_response>\n${safeStringify({ name: m.name, content: m.content })}\n</tool_response>`)
+
+  messages.forEach((m, i) => {
+    const cached = options.sent?.get(m)
+    if (cached !== undefined) return push(m.role === 'assistant' ? 'assistant' : 'user', cached)
+
+    let text: string
+    if (m.role === 'user') text = m.content
+    else if (m.role === 'tool') text = `<tool_response>\n${m.content}\n</tool_response>`
+    else {
+      const raw = m.providerData?.provider === options.provider ? (m.providerData?.data as { raw?: string })?.raw : undefined
+      if (raw !== undefined) {
+        text = i < lastUser && !options.keepReasoning ? raw.replace(THINK_BLOCK, '') : raw
+      } else {
+        const calls = (m.toolCalls ?? []).map(
+          (c) => `<tool_call>\n${JSON.stringify({ name: c.name, arguments: c.input ?? {} })}\n</tool_call>`,
+        )
+        text = [m.content, ...calls].filter(Boolean).join('\n') || '(no output)'
+      }
     }
-  }
+
+    if (i === trailingStart && m.role !== 'assistant' && options.context) {
+      text = `<context>\n${options.context}\n</context>\n\n${text}`
+    }
+    if (i >= trailingStart) options.sent?.set(m, text)
+    push(m.role === 'assistant' ? 'assistant' : 'user', text)
+  })
   return out
 }
+
+/** @deprecated Use `renderMessages`. */
+export const toTextMessages = (messages: Message[]) => renderMessages(messages)
 
 type Mode = 'text' | 'think' | 'tool' | 'discard'
 const OPEN: Record<string, Mode> = { '<think>': 'think', '<tool_call>': 'tool', '<tool_response>': 'discard' }

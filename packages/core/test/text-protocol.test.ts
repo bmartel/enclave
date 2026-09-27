@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { fromTextModel, TaggedStreamParser, toTextMessages } from '../src/models/text-protocol.js'
-import type { ModelChunk } from '../src/types.js'
+import { fromTextModel, renderMessages, TaggedStreamParser, toTextMessages } from '../src/models/text-protocol.js'
+import type { Message, ModelChunk } from '../src/types.js'
 import { collect } from './helpers.js'
 
 function parseAll(pieces: string[]): ModelChunk[] {
@@ -75,10 +75,57 @@ describe('fromTextModel', () => {
     )
     expect(seen!.system).toContain('SYS')
     expect(seen!.system).toContain('"name":"lookup"')
-    expect(seen!.system.trim().endsWith('CTX')).toBe(true)
+    // Live context rides on the newest message so the system prompt stays cacheable.
+    expect(seen!.system).not.toContain('CTX')
     expect(seen!.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user'])
-    expect(seen!.messages[2]!.content).toContain('<tool_response>')
+    expect(seen!.messages[2]!.content).toBe('<context>\nCTX\n</context>\n\n<tool_response>\n{"ok":true}\n</tool_response>')
     expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: 'tool-calls' })
+  })
+
+  it('keeps the prompt byte-stable across steps so engines can reuse their KV cache', async () => {
+    const seen: { system: string; messages: { role: string; content: string }[] }[] = []
+    const firstReply = '<think>plan</think><tool_call>{"name":"lookup","arguments":{}}</tool_call>'
+    const outputs = [firstReply, 'Done.']
+    const model = fromTextModel({
+      id: 'kv',
+      async *streamText(req) {
+        seen.push(structuredClone({ system: req.system, messages: req.messages }))
+        yield outputs.shift()!
+      },
+    })
+    const history: Message[] = [{ role: 'user', content: 'go' }]
+    const tools = [{ name: 'lookup', description: 'd', inputSchema: { type: 'object' } }]
+    const step = async (context: string) => {
+      const chunks = await collect(model.stream({ system: 'S', context, tools, messages: history }))
+      const finish = chunks.at(-1) as Extract<ModelChunk, { type: 'finish' }>
+      const calls = chunks.flatMap((c) => (c.type === 'tool-call' ? [c.call] : []))
+      history.push({ role: 'assistant', content: '', ...(calls.length ? { toolCalls: calls } : {}), providerData: finish.providerData! })
+      return calls
+    }
+    const calls = await step('state v1')
+    history.push({ role: 'tool', toolCallId: calls[0]!.id, name: 'lookup', content: 'result' })
+    await step('state v2')
+
+    // Step 2 = step 1's prompt + the raw generated reply + the new tool result.
+    expect(seen[1]!.system).toBe(seen[0]!.system)
+    expect(seen[1]!.messages[0]).toEqual(seen[0]!.messages[0])
+    expect(seen[0]!.messages[0]!.content).toContain('state v1')
+    expect(seen[1]!.messages[1]).toEqual({ role: 'assistant', content: firstReply })
+    expect(seen[1]!.messages[2]!.content).toContain('state v2')
+  })
+
+  it('drops reasoning from earlier turns but keeps it within the current turn', () => {
+    const provider = 'text:m'
+    const msgs: Message[] = [
+      { role: 'user', content: 'a' },
+      { role: 'assistant', content: 'A', providerData: { provider, data: { raw: '<think>old</think>\n\nA' } } },
+      { role: 'user', content: 'b' },
+      { role: 'assistant', content: '', providerData: { provider, data: { raw: '<think>new</think><tool_call>{}</tool_call>' } } },
+      { role: 'tool', toolCallId: 'x', name: 't', content: 'r' },
+    ]
+    const out = renderMessages(msgs, { provider })
+    expect(out[1]!.content).toBe('A')
+    expect(out[3]!.content).toBe('<think>new</think><tool_call>{}</tool_call>')
   })
 
   it('merges consecutive same-role turns', () => {

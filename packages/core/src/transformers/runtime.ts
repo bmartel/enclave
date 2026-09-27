@@ -33,6 +33,15 @@ export interface GenerateRequest {
   stop?: string[]
 }
 
+/** Where Transformers.js fetches models and the ONNX Runtime WASM from. */
+export interface TransformersEnv {
+  remoteHost?: string
+  remotePathTemplate?: string
+  allowRemoteModels?: boolean
+  /** Self-hosted ONNX Runtime WASM (otherwise loaded from cdn.jsdelivr.net). */
+  wasmPaths?: string | { mjs: string; wasm: string }
+}
+
 export interface LoadProgress {
   model: string
   status: string
@@ -49,16 +58,35 @@ interface Backend {
   f16: boolean
 }
 
+function applyEnv(lib: TJS, env: TransformersEnv): void {
+  if (env.remoteHost !== undefined) lib.env.remoteHost = env.remoteHost
+  if (env.remotePathTemplate !== undefined) lib.env.remotePathTemplate = env.remotePathTemplate
+  if (env.allowRemoteModels !== undefined) lib.env.allowRemoteModels = env.allowRemoteModels
+  const wasm = (lib.env.backends.onnx as { wasm?: { wasmPaths?: unknown } }).wasm
+  if (env.wasmPaths !== undefined && wasm) wasm.wasmPaths = env.wasmPaths
+}
+
 export class TransformersRuntime {
   private lib: Promise<TJS> | undefined
   private backend: Promise<Backend> | undefined
   private readonly loaded = new Map<string, Promise<any>>()
   private queue: Promise<unknown> = Promise.resolve()
 
+  private env: TransformersEnv = {}
+
   constructor(private readonly onProgress?: (progress: LoadProgress) => void) {}
 
+  /** Apply hosting settings. Takes effect for models loaded afterwards. */
+  async configure(env: TransformersEnv): Promise<void> {
+    this.env = { ...this.env, ...env }
+    if (this.lib) applyEnv(await this.lib, this.env)
+  }
+
   private tjs(): Promise<TJS> {
-    return (this.lib ??= import('@huggingface/transformers'))
+    return (this.lib ??= import('@huggingface/transformers').then((lib) => {
+      applyEnv(lib, this.env)
+      return lib
+    }))
   }
 
   private detect(): Promise<Backend> {

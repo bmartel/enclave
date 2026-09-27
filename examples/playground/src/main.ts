@@ -80,9 +80,13 @@ function modelFromSelection(value: string, local: LocalModelInfo[] = []): Model 
   return undefined
 }
 
+// `pnpm dev:strict`: every model file from this origin, only on-device components.
+const strict = import.meta.env.VITE_STRICT === '1'
+
 const ai = await createWebEnclave({
   workers,
   dataDir: 'idb://enclave-playground',
+  ...(strict ? { selfHost: { baseUrl: '/models' }, privacy: { allow: 'device' as const } } : {}),
   llm: selection.startsWith('browser:') ? selection.slice(8) : (modelFromSelection(selection) ?? 'auto'),
   embedding: stored('embedding', 'auto'),
   reranker: stored('reranker', 'auto') === 'none' ? false : stored('reranker', 'auto'),
@@ -209,7 +213,7 @@ async function applySelection() {
   store('model', selection)
   describeSelection()
   const model = selection.startsWith('browser:')
-    ? await browserLLM(selection.slice(8), { workers, device, thinking: thinking.checked, onProgress })
+    ? await browserLLM(selection.slice(8), { workers, device, thinking: thinking.checked ? 'auto' : false, onProgress })
     : modelFromSelection(selection, localModels)
   if (model) {
     ai.setModel(model)
@@ -500,10 +504,12 @@ $<HTMLTextAreaElement>('input').onkeydown = (e) => {
 }
 
 chromeAvailable = await chromeAIAvailable().catch(() => false)
-void discoverLocalModels({ timeoutMs: 800 }).then(async (found) => {
-  localModels = found
-  await renderModelOptions()
-})
+if (!strict) {
+  void discoverLocalModels({ timeoutMs: 800 }).then(async (found) => {
+    localModels = found
+    await renderModelOptions()
+  })
+}
 await Promise.all([renderModelOptions(), renderHistory(), refreshThreads(), refreshCollections()])
 document.body.dataset.ready = 'true'
 

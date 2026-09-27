@@ -1,8 +1,15 @@
 import { createEnclave, type Enclave, type EnclaveOptions } from '../enclave.js'
-import { webllm } from '../models/webllm.js'
+import { selfHostedAppConfig, webllm, type ThinkingMode } from '../models/webllm.js'
+import { selfHostedTransformers } from '../privacy/index.js'
 import { createDb } from '../store/pglite.js'
 import { createWorkerDb } from '../store/pglite-worker.js'
-import { transformersEmbedder, transformersLLM, transformersReranker, type LoadProgress } from '../transformers/index.js'
+import {
+  configureTransformers,
+  transformersEmbedder,
+  transformersLLM,
+  transformersReranker,
+  type LoadProgress,
+} from '../transformers/index.js'
 import type { Db, Embedder, Model, Reranker } from '../types.js'
 import {
   findEmbedding,
@@ -20,6 +27,7 @@ import { detectDevice, persistStorage, type DeviceProfile } from './device.js'
 
 export * from './catalog.js'
 export * from './device.js'
+export type { ThinkingMode } from '../models/webllm.js'
 
 export interface WebProgress {
   stage: 'device' | 'database' | 'embedding' | 'reranker' | 'llm'
@@ -40,8 +48,15 @@ export interface WebWorkers {
 export interface BrowserLLMOptions {
   workers?: WebWorkers
   device?: DeviceProfile
-  thinking?: boolean
+  /** `true`, `false`, or `'auto'` (reason on user requests, not after tool results). WebLLM only for `'auto'`. */
+  thinking?: ThinkingMode
   temperature?: number
+  /** WebLLM: grammar-constrain tool calls. Default true. */
+  constrainToolCalls?: boolean
+  /** WebLLM: keep reasoning across turns for KV reuse (`all`) or drop it (`current-turn`, default). */
+  reasoningHistory?: 'current-turn' | 'all'
+  /** WebLLM: serve weights from your own host. See `selfHostedAppConfig`. */
+  appConfig?: import('@mlc-ai/web-llm').AppConfig
   contextWindow?: number
   onProgress?(p: WebProgress): void
 }
@@ -65,7 +80,7 @@ export async function browserLLM(
         ...(options.workers?.llm ? { worker: options.workers.llm } : {}),
         ...(options.contextWindow ? { contextWindow: options.contextWindow } : {}),
         ...(options.thinking !== undefined ? { thinking: options.thinking } : {}),
-        ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
+        ...webllmTuning(options),
         ...(options.onProgress ? { onProgress: llmProgress(options.onProgress) } : {}),
       })
     }
@@ -74,8 +89,9 @@ export async function browserLLM(
     choice = selection
   }
   const contextWindow = options.contextWindow ?? choice.contextWindow
-  // Hybrid-reasoning models call tools far more reliably with thinking on.
-  const thinking = options.thinking ?? choice.preset.thinking === 'hybrid'
+  // Hybrid-reasoning models call tools far more reliably with thinking on;
+  // 'auto' skips it after tool results, where it costs latency without helping.
+  const thinking: ThinkingMode = options.thinking ?? (choice.preset.thinking === 'hybrid' ? 'auto' : false)
 
   if (choice.preset.runtime === 'webllm') {
     return webllm({
@@ -83,7 +99,7 @@ export async function browserLLM(
       contextWindow,
       thinking,
       ...(options.workers?.llm ? { worker: options.workers.llm } : {}),
-      ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
+      ...webllmTuning(options),
       ...(options.onProgress ? { onProgress: llmProgress(options.onProgress) } : {}),
     })
   }
@@ -91,7 +107,7 @@ export async function browserLLM(
     model: choice.modelId,
     contextWindow,
     ...(choice.dtype ? { dtype: choice.dtype } : {}),
-    thinking,
+    thinking: thinking === 'auto' ? true : thinking,
     ...(options.workers?.ml ? { worker: options.workers.ml } : {}),
     ...(options.onProgress ? { onProgress: fileProgress('llm', options.onProgress) } : {}),
   })
@@ -117,9 +133,18 @@ export interface WebEnclaveOptions extends Omit<EnclaveOptions, 'db' | 'model' |
    * Thinking mode for hybrid-reasoning browser models (Qwen3). Default: on for
    * those models. It is slower but makes tool use reliable; turn off for plain chat.
    */
-  thinking?: boolean
+  thinking?: ThinkingMode
+  /** Fine-tune the WebLLM engine (grammar constraints, reasoning history, self-hosted weights). */
+  webllm?: Pick<BrowserLLMOptions, 'constrainToolCalls' | 'reasoningHistory' | 'appConfig' | 'temperature'>
   /** Ask the browser to keep data and model caches from eviction. Default true. */
   persist?: boolean
+  /**
+   * Serve every model file (WebLLM weights + libraries, Transformers.js
+   * models, ONNX Runtime WASM) from your own host, mirrored with
+   * `enclave-mirror`. With this and `contentSecurityPolicy({ modelHosts: [] })`
+   * the app never contacts a third party.
+   */
+  selfHost?: { baseUrl: string }
   /** Download the LLM during setup instead of on the first message. Default false. */
   preloadLLM?: boolean
   onProgress?(p: WebProgress): void
@@ -165,6 +190,11 @@ export async function createWebEnclave(options: WebEnclaveOptions = {}): Promise
     (workers.db
       ? await createWorkerDb(workers.db, { dataDir: options.dataDir ?? 'idb://enclave' })
       : await createDb({ dataDir: options.dataDir ?? 'idb://enclave' }))
+
+  if (options.selfHost) {
+    await configureTransformers(selfHostedTransformers(options.selfHost), workers.ml)
+  }
+  const appConfig = options.selfHost ? await selfHostedAppConfig(options.selfHost) : options.webllm?.appConfig
 
   // Embeddings
   let embedder: Embedder
@@ -215,6 +245,8 @@ export async function createWebEnclave(options: WebEnclaveOptions = {}): Promise
     workers,
     device,
     ...(options.thinking !== undefined ? { thinking: options.thinking } : {}),
+    ...options.webllm,
+    ...(appConfig ? { appConfig } : {}),
     onProgress: report,
   }
   let model: Model
@@ -234,7 +266,7 @@ export async function createWebEnclave(options: WebEnclaveOptions = {}): Promise
   }
   if (options.preloadLLM) await (model as { load?(): Promise<void> }).load?.()
 
-  const { workers: _w, dataDir: _d, db: _db, llm: _l, embedding: _e, reranker: _r, gpuBudgetMB: _g, maxDownloadMB: _m, thinking: _t, persist: _p, preloadLLM: _pl, onProgress: _o, ...rest } = options
+  const { workers: _w, dataDir: _d, db: _db, llm: _l, embedding: _e, reranker: _r, gpuBudgetMB: _g, maxDownloadMB: _m, selfHost: _sh, thinking: _t, webllm: _wl, persist: _p, preloadLLM: _pl, onProgress: _o, ...rest } = options
   const enclave = await createEnclave({
     ...rest,
     db,
@@ -259,6 +291,15 @@ export async function createWebEnclave(options: WebEnclaveOptions = {}): Promise
       return next
     },
   })
+}
+
+function webllmTuning(options: BrowserLLMOptions) {
+  return {
+    ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
+    ...(options.constrainToolCalls !== undefined ? { constrainToolCalls: options.constrainToolCalls } : {}),
+    ...(options.reasoningHistory ? { reasoningHistory: options.reasoningHistory } : {}),
+    ...(options.appConfig ? { appConfig: options.appConfig } : {}),
+  }
 }
 
 function llmProgress(report: (p: WebProgress) => void) {

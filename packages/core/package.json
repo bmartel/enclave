@@ -6,7 +6,8 @@
   "license": "MIT",
   "sideEffects": false,
   "files": [
-    "dist"
+    "dist",
+    "bin"
   ],
   "exports": {
     ".": {
@@ -64,6 +65,14 @@
     "./models/local": {
       "types": "./dist/models/local.d.ts",
       "default": "./dist/models/local.js"
+    },
+    "./eval": {
+      "types": "./dist/eval/index.d.ts",
+      "default": "./dist/eval/index.js"
+    },
+    "./privacy": {
+      "types": "./dist/privacy/index.d.ts",
+      "default": "./dist/privacy/index.js"
     }
   },
   "scripts": {
@@ -101,5 +110,8 @@
     "typescript": "^7.0.2",
     "vitest": "^5.0.2",
     "zod": "^4.6.5"
+  },
+  "bin": {
+    "enclave-mirror": "./bin/enclave-mirror.mjs"
   }
 }

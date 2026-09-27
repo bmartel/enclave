@@ -1,5 +1,6 @@
 import type { Embedder, FinishReason, Message, Model, ModelChunk, ModelRequest } from '../types.js'
 import { openaiCompatible } from './openai.js'
+import { localityOfUrl } from '../privacy/index.js'
 
 export const OLLAMA_URL = 'http://localhost:11434'
 export const LMSTUDIO_URL = 'http://localhost:1234'
@@ -35,6 +36,7 @@ export function ollama(options: OllamaOptions): Model {
 
   return {
     id: `ollama:${options.model}`,
+    locality: localityOfUrl(baseURL),
     contextWindow,
     async *stream(request: ModelRequest): AsyncGenerator<ModelChunk> {
       const response = await doFetch(`${baseURL}/api/chat`, {
@@ -149,6 +151,7 @@ export function lmstudio(options: LMStudioOptions): Model {
   })
   return {
     id: `lmstudio:${options.model}`,
+    locality: localityOfUrl(baseURL),
     ...(options.contextWindow ? { contextWindow: options.contextWindow } : {}),
     async *stream(request) {
       try {
@@ -297,6 +300,7 @@ export function localEmbedder(options: LocalEmbedderOptions): Embedder {
   const doFetch = options.fetch ?? fetch
   return {
     id: `${options.provider}:${options.model}@${options.dimensions}`,
+    locality: localityOfUrl(base),
     dimensions: options.dimensions,
     async embed(texts, kind) {
       const prefix = (kind === 'query' ? options.queryPrefix : options.documentPrefix) ?? ''

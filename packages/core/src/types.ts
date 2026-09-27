@@ -1,5 +1,11 @@
 import type { PGliteInterface } from '@electric-sql/pglite'
 
+/**
+ * Where a component processes data: on this `device` (in the browser or a
+ * loopback server), on the `local-network`, or on a `remote` service.
+ */
+export type Locality = 'device' | 'local-network' | 'remote'
+
 /** Any PGlite instance (in-thread `PGlite` or `PGliteWorker`). */
 export type Db = PGliteInterface
 
@@ -64,6 +70,19 @@ export interface Usage {
   outputTokens: number
 }
 
+/** Per-step timing reported by backends that measure it (WebLLM). */
+export interface StepMetrics {
+  /** Tokens actually prefilled this step (low when the KV cache was reused). */
+  prefillTokens?: number
+  timeToFirstTokenMs?: number
+  prefillTokensPerSec?: number
+  decodeTokensPerSec?: number
+  /** Time spent compiling the tool-call grammar for this step. */
+  grammarInitMs?: number
+  /** True when the engine continued from its KV cache instead of re-reading the prompt. */
+  kvCacheReused?: boolean
+}
+
 export type FinishReason = 'stop' | 'tool-calls' | 'length' | 'refusal' | 'error'
 
 export type ModelChunk =
@@ -74,12 +93,15 @@ export type ModelChunk =
       type: 'finish'
       reason: FinishReason
       usage?: Usage
+      metrics?: StepMetrics
       providerData?: AssistantMessage['providerData']
     }
 
 /** The single contract every model backend implements. */
 export interface Model {
   readonly id: string
+  /** Where prompts are processed. Undeclared counts as `remote`. */
+  readonly locality?: Locality
   /**
    * Context window in tokens, when known. The agent uses it to budget history
    * and tool output so small local models don't overflow.
@@ -97,6 +119,8 @@ export type EmbedKind = 'query' | 'document'
 export interface Embedder {
   /** Stable identifier; a change triggers a reindex requirement. */
   readonly id: string
+  /** Where document text is processed. Undeclared counts as `remote`. */
+  readonly locality?: Locality
   readonly dimensions: number
   embed(texts: string[], kind: EmbedKind): Promise<number[][]>
   /** Model-specific document formatting (e.g. EmbeddingGemma's `title: … | text: …`). */
@@ -108,6 +132,7 @@ export interface Embedder {
 /** Cross-encoder that scores (query, document) relevance; higher is better. */
 export interface Reranker {
   readonly id: string
+  readonly locality?: Locality
   rerank(query: string, documents: string[]): Promise<number[]>
   load?(): Promise<void>
 }
@@ -125,6 +150,7 @@ export type AgentEvent =
   | { type: 'tool-result'; call: ToolCall; output: unknown; isError: boolean; durationMs: number }
   | { type: 'custom'; skill: string; tool: string; data: unknown }
   | { type: 'message'; message: Message }
+  | { type: 'step-finish'; step: number; reason: FinishReason; durationMs: number; usage?: Usage; metrics?: StepMetrics }
   | { type: 'finish'; reason: FinishReason | 'max-steps' | 'aborted'; steps: number; usage: Usage }
 
 export type ApprovalHandler = (call: ToolCall) => boolean | Promise<boolean>
