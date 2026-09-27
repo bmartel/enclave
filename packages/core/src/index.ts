@@ -1,0 +1,22 @@
+export { createEnclave, Enclave, Thread, AgentStream } from './enclave.js'
+export type { EnclaveOptions, RunOptions, RunResult, ThreadInfo } from './enclave.js'
+export { defineSkill } from './skill.js'
+export type { Skill, SkillContext } from './skill.js'
+export { tool, toJSONSchema } from './tool.js'
+export type { ToolDef, ToolContext } from './tool.js'
+export { Knowledge, toOrQuery } from './rag/knowledge.js'
+export type {
+  KnowledgeOptions,
+  IngestDocument,
+  IngestOptions,
+  IngestResult,
+  SearchOptions,
+  SearchHit,
+  CollectionInfo,
+} from './rag/knowledge.js'
+export { chunkText, type ChunkOptions } from './rag/chunk.js'
+export { migrate } from './store/migrate.js'
+export { fromTextModel, TaggedStreamParser, type TextModel } from './models/text-protocol.js'
+export { fallback } from './models/fallback.js'
+export { runAgent, trimHistory, DEFAULT_SYSTEM, ACTIVATE_SKILL } from './agent.js'
+export type * from './types.js'

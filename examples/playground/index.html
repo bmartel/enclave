@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Enclave Playground</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header>
+      <strong>enclave</strong>
+      <span id="device" class="chip">probing device…</span>
+      <span id="status">starting…</span>
+    </header>
+    <div id="progress" hidden><div id="progress-bar"></div></div>
+    <main>
+      <aside>
+        <h2>Model</h2>
+        <select id="model"></select>
+        <p id="model-info" class="hint"></p>
+        <div class="row">
+          <button id="load">Download &amp; load</button>
+          <button id="forget" title="Delete this model's cached weights">Delete cache</button>
+          <button id="discover" title="Look for Ollama / LM Studio on this computer">Find local</button>
+        </div>
+        <label class="check"><input id="thinking" type="checkbox" /> Thinking (slower; much more reliable tool use)</label>
+
+        <h2>Retrieval</h2>
+        <label>Embeddings <select id="embedding"></select></label>
+        <label>Reranker <select id="reranker"></select></label>
+        <p class="hint">Changing these re-embeds your documents on reload.</p>
+
+        <h2>Knowledge</h2>
+        <label class="drop" id="drop">
+          <input id="files" type="file" multiple accept=".txt,.md,.markdown,.csv,.json,.html" hidden />
+          Drop or choose text files to index privately
+        </label>
+        <ul id="collections"></ul>
+
+        <h2>Threads</h2>
+        <button id="new-thread">New thread</button>
+        <ul id="threads"></ul>
+      </aside>
+      <section id="chat">
+        <div id="log"></div>
+        <form id="composer">
+          <textarea id="input" rows="2" placeholder="Ask about your documents, or: create a table of my books and add three"></textarea>
+          <button id="send">Send</button>
+          <button id="stop" type="button" hidden>Stop</button>
+        </form>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

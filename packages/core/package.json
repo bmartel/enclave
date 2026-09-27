@@ -1,0 +1,105 @@
+{
+  "name": "@enclave/core",
+  "version": "0.1.0",
+  "description": "Web-first, offline agent framework: WebLLM + Transformers.js + PGlite/pgvector RAG, with Ollama/LM Studio support and a tight skill API.",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./pglite": {
+      "types": "./dist/store/pglite.d.ts",
+      "default": "./dist/store/pglite.js"
+    },
+    "./pglite-worker": {
+      "types": "./dist/store/pglite-worker.d.ts",
+      "default": "./dist/store/pglite-worker.js"
+    },
+    "./models/openai": {
+      "types": "./dist/models/openai.d.ts",
+      "default": "./dist/models/openai.js"
+    },
+    "./models/anthropic": {
+      "types": "./dist/models/anthropic.d.ts",
+      "default": "./dist/models/anthropic.js"
+    },
+    "./models/webllm": {
+      "types": "./dist/models/webllm.d.ts",
+      "default": "./dist/models/webllm.js"
+    },
+    "./models/chrome": {
+      "types": "./dist/models/chrome.d.ts",
+      "default": "./dist/models/chrome.js"
+    },
+    "./skills": {
+      "types": "./dist/skills/index.d.ts",
+      "default": "./dist/skills/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    },
+    "./models/webllm-worker": {
+      "types": "./dist/models/webllm-worker.d.ts",
+      "default": "./dist/models/webllm-worker.js"
+    },
+    "./web": {
+      "types": "./dist/web/index.d.ts",
+      "default": "./dist/web/index.js"
+    },
+    "./transformers": {
+      "types": "./dist/transformers/index.d.ts",
+      "default": "./dist/transformers/index.js"
+    },
+    "./transformers/worker": {
+      "types": "./dist/transformers/worker.d.ts",
+      "default": "./dist/transformers/worker.js"
+    },
+    "./models/local": {
+      "types": "./dist/models/local.d.ts",
+      "default": "./dist/models/local.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:e2e": "ENCLAVE_E2E=1 vitest run test/models.e2e.test.ts"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/sdk": ">=0.100.0",
+    "@electric-sql/pglite": ">=0.5.0",
+    "@huggingface/transformers": ">=4.0.0",
+    "@mlc-ai/web-llm": ">=0.2.80",
+    "zod": "^4.0.0",
+    "@electric-sql/pglite-pgvector": ">=0.0.9"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/sdk": {
+      "optional": true
+    },
+    "@huggingface/transformers": {
+      "optional": true
+    },
+    "@mlc-ai/web-llm": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
+    "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite-pgvector": "^0.0.9",
+    "@huggingface/transformers": "^4.3.0",
+    "@mlc-ai/web-llm": "^0.2.85",
+    "@types/node": "^26.6.3",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2",
+    "zod": "^4.6.5"
+  }
+}
