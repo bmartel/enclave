@@ -23,13 +23,18 @@ export function memorySkill(options: MemorySkillOptions = {}) {
   return defineSkill({
     name: 'memory',
     description: 'Remember durable facts and preferences about the user across conversations.',
-    instructions: `Save stable facts, preferences and decisions the user shares with remember (one fact per call, written as a standalone sentence).
-Use recall when earlier context might matter. Don't store secrets or transient details.`,
+    instructions: `Save stable facts, preferences and decisions the user shares with remember (one fact per call, written as a standalone sentence). When the user asks you to remember something, call remember: saying you will is not enough.
+- "Known about the user" lists what you remember; use it to answer questions about the user.
+- Use recall when earlier context might matter. Call forget with the id when a fact is outdated or the user asks you to forget it.
+- Never store secrets (passwords, keys, card numbers) or transient details. Tell the user you won't store secrets.`,
     tools: {
       remember: tool({
         description: 'Store one durable fact.',
         input: z.object({ fact: z.string().min(3).max(1000) }),
         execute: async ({ fact }, ctx) => {
+          if (looksLikeSecret(fact)) {
+            throw new Error('Not saved: this looks like a password, key or other secret, and secrets are never stored in memory. Tell the user.')
+          }
           const id = uid('mem_')
           await requireKnowledge(ctx).ingest({
             id,
@@ -67,3 +72,17 @@ Use recall when earlier context might matter. Don't store secrets or transient d
     },
   })
 }
+
+/** Credentials and card numbers, which must never reach long-term memory. */
+const SECRET_PATTERNS = [
+  // "password is Tr0ub4dor&3", "api key: abc123…", "PIN = 4821"
+  /\b(password|passcode|passphrase|pin|api[ _-]?key|secret|token|credentials?|cvv)\b\W{0,3}(is|was|:|=)\s*["'`]?(?=\S*[\d!@#$%^&*])\S{4,}/i,
+  // Card numbers
+  /\b(?:\d[ -]?){13,19}\b/,
+  // Common key prefixes
+  /\b(sk|pk|rk|ghp|gho|xox[abp])[-_][A-Za-z0-9_-]{10,}/,
+  // Private key blocks
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+]
+
+export const looksLikeSecret = (text: string): boolean => SECRET_PATTERNS.some((p) => p.test(text))

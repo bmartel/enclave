@@ -127,6 +127,12 @@ export interface Embedder {
   readonly locality?: Locality
   readonly dimensions: number
   embed(texts: string[], kind: EmbedKind): Promise<number[][]>
+  /**
+   * Cosine similarity below which a query and a passage are almost certainly
+   * unrelated. Calibrated per model (cosine scales differ widely); decides
+   * when automatic retrieval should stay silent. Default 0.35.
+   */
+  readonly relevanceFloor?: number
   /** Model-specific document formatting (e.g. EmbeddingGemma's `title: … | text: …`). */
   formatDocument?(text: string, title?: string): string
   /** Start downloading/compiling the model ahead of first use. */

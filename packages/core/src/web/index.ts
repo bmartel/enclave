@@ -297,6 +297,8 @@ export async function createWebEnclave(options: WebEnclaveOptions = {}): Promise
     embedder,
     ...(reranker ? { reranker } : {}),
     knowledge: {
+      // Each embedding preset searches in the mode it scored best in.
+      ...('searchMode' in embeddingPlan ? { defaultMode: embeddingPlan.searchMode } : {}),
       // Switching embedding presets re-embeds existing documents instead of failing.
       autoReindex: true,
       onReindexProgress: (done, total) =>

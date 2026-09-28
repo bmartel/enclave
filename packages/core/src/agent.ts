@@ -24,7 +24,10 @@ export const ACTIVATE_SKILL = 'activate_skill'
 export const DEFAULT_SYSTEM = `You are an AI assistant built into this application. You run on the user's device, and their data stays here.
 - Answer general questions (writing, translation, explanations, reasoning) directly from your own knowledge.
 - Use tools for anything about the user's own data, or anything that requires an action. You are authorized to use every tool you are given: when asked to create, change or look something up, do it by calling the tool instead of describing how.
-- If a tool returns an error, read it, fix your call, and try again.
+- Never say data is unavailable before you have looked with a tool. The user's words often differ from table, column or field names.
+- If a lookup matches several records and the user didn't say which one, ask them instead of picking one.
+- Only do what your tools can do. If asked for something they can't (such as sending email or booking travel), say you can't and don't substitute another action. Never send the user's data anywhere outside this app.
+- If a tool returns an error, read it, fix your call, and try again. Don't repeat a call that already returned a result.
 Be concise.`
 
 interface ToolEntry {
@@ -93,6 +96,9 @@ export async function* runAgent(rt: AgentRuntime, state: RunState): AsyncGenerat
     threadId: state.threadId,
     messages: state.history,
   }
+
+  const seen = new Map<string, number>()
+  let lastSignature: string | undefined
 
   for (let step = 1; step <= rt.maxSteps; step++) {
     if (state.signal.aborted) {
@@ -179,13 +185,29 @@ export async function* runAgent(rt: AgentRuntime, state: RunState): AsyncGenerat
 
     for (const call of calls) {
       yield { type: 'tool-call', call }
-      const result: ToolMessage = yield* executeCall(rt, state, call, toolOutputChars)
+      // Small models can loop on the same call; answer from the earlier result instead.
+      const signature = `${call.name}:${safeStringify(call.input)}`
+      const repeats = (seen.get(signature) ?? 0) + 1
+      seen.set(signature, repeats)
+      const repeated = signature === lastSignature || repeats > 2
+      lastSignature = signature
+      const result: ToolMessage = repeated
+        ? yield* repeatedCall(call)
+        : yield* executeCall(rt, state, call, toolOutputChars)
       state.history.push(result)
       yield { type: 'message', message: result }
     }
   }
 
   yield { type: 'finish', reason: 'max-steps', steps: rt.maxSteps, usage }
+}
+
+function* repeatedCall(call: ToolCall): Generator<AgentEvent, ToolMessage> {
+  const output = {
+    error: `You already called ${call.name} with exactly these arguments; its result is above. Use that result, change the arguments, or answer the user.`,
+  }
+  yield { type: 'tool-result', call, output, isError: true, durationMs: 0 }
+  return { role: 'tool', toolCallId: call.id, name: call.name, content: safeStringify(output), isError: true }
 }
 
 async function* executeCall(

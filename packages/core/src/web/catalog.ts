@@ -146,6 +146,18 @@ export interface EmbeddingPreset {
   maxTokens: number
   languages: 'en' | 'multilingual'
   license: string
+  /**
+   * Best search mode for this model, measured on the evals retrieval benchmark
+   * (91 labeled queries). Strong multilingual embedders do better on pure
+   * vector search; smaller ones gain from keyword fusion.
+   */
+  searchMode: 'vector' | 'hybrid'
+  /**
+   * Cosine similarity below which queries and passages are unrelated for
+   * this model (see `Embedder.relevanceFloor`). Measured on 95 on-topic and 18
+   * conversational messages over the eval corpus.
+   */
+  relevanceFloor: number
 }
 
 export const EMBEDDING_PRESETS: EmbeddingPreset[] = [
@@ -164,6 +176,8 @@ export const EMBEDDING_PRESETS: EmbeddingPreset[] = [
     maxTokens: 2048,
     languages: 'multilingual',
     license: 'gemma',
+    searchMode: 'vector', // recall@3 0.995 vs 0.951 hybrid; multilingual 10/10 vs 8/10
+    relevanceFloor: 0.35, // keeps 91/95 on-topic, silences 10/18 conversational
   },
   {
     id: 'granite-small-r2',
@@ -176,6 +190,8 @@ export const EMBEDDING_PRESETS: EmbeddingPreset[] = [
     maxTokens: 8192,
     languages: 'en',
     license: 'apache-2.0',
+    searchMode: 'hybrid', // MRR 0.822 hybrid vs 0.791 vector
+    relevanceFloor: 0.78, // 92/95, 8/18
   },
   {
     id: 'granite-multilingual-r2',
@@ -189,6 +205,8 @@ export const EMBEDDING_PRESETS: EmbeddingPreset[] = [
     maxTokens: 32768,
     languages: 'multilingual',
     license: 'apache-2.0',
+    searchMode: 'hybrid', // MRR 0.852 hybrid vs 0.795 vector
+    relevanceFloor: 0.76, // 94/95, 6/18
   },
   {
     id: 'qwen3-embedding-0.6b',
@@ -204,6 +222,8 @@ export const EMBEDDING_PRESETS: EmbeddingPreset[] = [
     maxTokens: 32768,
     languages: 'multilingual',
     license: 'apache-2.0',
+    searchMode: 'vector', // not yet benchmarked; strong embedder like EmbeddingGemma
+    relevanceFloor: 0.4, // 92/95, 8/18
   },
   {
     id: 'gte-small',
@@ -217,6 +237,8 @@ export const EMBEDDING_PRESETS: EmbeddingPreset[] = [
     maxTokens: 512,
     languages: 'en',
     license: 'mit',
+    searchMode: 'vector', // MRR 0.886 vector vs 0.861 hybrid
+    relevanceFloor: 0.8, // 94/95, 6/18
   },
 ]
 
@@ -273,10 +295,15 @@ export function findReranker(id: string): RerankerPreset | undefined {
   return RERANKER_PRESETS.find((p) => p.id === id)
 }
 
-/** mxbai xsmall: small enough to download on first visit. Choose `bge-reranker-v2-m3` for multilingual corpora. */
-export function recommendReranker(device: DeviceProfile, _embedding?: EmbeddingPreset): RerankerPreset | undefined {
-  if (device.mobile) return undefined
-  return findReranker('mxbai-rerank-xsmall')
+/**
+ * No reranker by default. On the evals retrieval benchmark, EmbeddingGemma
+ * alone reached recall@3 0.995 / MRR 0.932; mxbai (English-only) lowered it to
+ * 0.945 / 0.908 and halved multilingual recall; bge-reranker-v2-m3 raised MRR
+ * to 0.973 at ~60x the latency and a 571 MB download. Opt in with
+ * `reranker: 'bge-reranker-v2-m3'` when ranking precision matters most.
+ */
+export function recommendReranker(_device: DeviceProfile, _embedding?: EmbeddingPreset): RerankerPreset | undefined {
+  return undefined
 }
 
 export function pickDtype(dtype: { webgpu: string; webgpuF32: string; wasm: string }, device: Pick<DeviceProfile, 'webgpu' | 'shaderF16'>): string {

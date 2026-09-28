@@ -62,3 +62,25 @@ export async function* drain<E, T>(task: (emit: (event: E) => void) => Promise<T
 export function toVectorLiteral(values: ArrayLike<number>): string {
   return `[${Array.prototype.join.call(values, ',')}]`
 }
+
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+/**
+ * The date spelled out for a model: today plus the next two weeks with
+ * weekdays. Small models get "this Friday" or "in 10 days" wrong when they
+ * must count themselves; with a lookup table they don't. Put it in a skill's
+ * `context`. `today` is a Date or YYYY-MM-DD (read as a calendar date).
+ */
+export function dateContext(today: Date | string = new Date(), days = 14): string {
+  const start =
+    typeof today === 'string'
+      ? new Date(`${today}T00:00:00Z`)
+      : new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()))
+  const day = (offset: number) => {
+    const d = new Date(start.getTime() + offset * 86_400_000)
+    return { name: WEEKDAYS[d.getUTCDay()]!, iso: d.toISOString().slice(0, 10) }
+  }
+  const upcoming = Array.from({ length: days }, (_, i) => day(i + 1)).map((d) => `${d.name.slice(0, 3)} ${d.iso}`)
+  const now = day(0)
+  return `Today is ${now.name} ${now.iso}. Upcoming days: ${upcoming.join(', ')}.`
+}

@@ -54,7 +54,7 @@ describe('runEval', () => {
     expect(report.passRate).toBeCloseTo(2 / 3)
     expect(report.results[0]!.steps).toBe(2)
     expect(report.tokens.meanOutput).toBeGreaterThan(0)
-    expect(formatReport(report)).toMatch(/mock: 67% passed[\s\S]*✗ must search/)
+    expect(formatReport(report)).toMatch(/mock: 67% \[\d+%–\d+%\] of 3 runs passed[\s\S]*✗ must search/)
     // Eval threads are cleaned up.
     expect(await ai.threads()).toEqual([])
   })

@@ -1,0 +1,30 @@
+{
+  "name": "@enclave/evals",
+  "private": true,
+  "type": "module",
+  "description": "Production eval suites for enclave: fixtures, graded cases with reference solutions, retrieval benchmarks and a WebGPU browser runner.",
+  "scripts": {
+    "test": "vitest run",
+    "test:retrieval": "ENCLAVE_E2E=1 vitest run test/retrieval.e2e.test.ts",
+    "typecheck": "tsc --noEmit",
+    "runner": "vite runner --port 5299 --strictPort",
+    "eval": "node scripts/run.mjs",
+    "compare": "node scripts/compare.mjs",
+    "status": "node scripts/status.mjs"
+  },
+  "dependencies": {
+    "@enclave/core": "workspace:*",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite-pgvector": "^0.0.9",
+    "@huggingface/transformers": "^4.3.0",
+    "@mlc-ai/web-llm": "^0.2.85",
+    "@types/node": "^26.6.3",
+    "playwright-core": "^1.63.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
+  }
+}

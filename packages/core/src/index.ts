@@ -20,5 +20,6 @@ export { fromTextModel, renderMessages, TaggedStreamParser, type TextModel, type
 export { fallback } from './models/fallback.js'
 export { runAgent, trimHistory, fitHistory, DEFAULT_SYSTEM, ACTIVATE_SKILL } from './agent.js'
 export { PrivacyError } from './privacy/index.js'
+export { dateContext } from './util.js'
 export type { PrivacyPolicy } from './enclave.js'
 export type * from './types.js'

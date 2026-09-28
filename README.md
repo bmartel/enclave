@@ -220,13 +220,23 @@ Tool context: `db`, `knowledge`, `embedder`, `threadId`, `skill`, `signal`, `emi
 ### Built-in skills
 
 - **`knowledgeSkill()`**
-  - Auto-retrieval (default on): before the model runs, the latest user message is searched and the best reranked passages go into context. This is classic RAG alongside the `search_knowledge` tool. Small models often skip the tool; with auto-retrieval, Qwen3 0.6B answered document questions correctly where it previously invented an answer.
+  - Auto-retrieval (default on): before the model runs, the latest user message is searched and the most relevant passages go into context. This is classic RAG alongside the `search_knowledge` tool. Small models often skip the tool; with auto-retrieval, Qwen3 0.6B answered document questions correctly where it previously invented an answer.
+  - Auto-retrieval stays silent unless something is relevant. Irrelevant passages hurt small models badly: in the production evals, passages attached to "remember that I'm on the Payments team" made the model summarise support SLAs instead of saving the fact.
+    - A passage is used only when the best match clears the embedder's `relevanceFloor`. Each preset has a floor, calibrated because cosine scales differ by model: 0.35 for EmbeddingGemma, 0.8 for GTE.
+    - Passages must also score at least half the best match's margin above that floor.
+    - A short follow-up ("how much does it cost?") is searched again together with the previous question.
+  - Documents are treated as untrusted. Passages that address AI assistants ("ignore previous instructions…") are flagged as untrusted. They are dropped from auto-retrieval unless they are the best match (for example, when the user asks about that document). `looksLikeInjection` is exported.
+  - Tune with `autoRetrieve: { minSimilarity, relativeCutoff, limit, maxChars, minRerankScore }`.
   - Passages are cited as `[n]`.
 - **`sqlSkill({ readOnly, approveWrites, maxRows })`**
   - The database.build capability: live schema in context, plus `describe_schema` and `execute_sql`.
   - Writes need approval by default.
   - The internal `enclave` schema is hidden from the model.
-- **`memorySkill()`**: `remember`, `recall` and `forget`, backed by the knowledge base. Recent facts are added to context.
+- **`memorySkill()`**: `remember`, `recall` and `forget`, backed by the knowledge base. Recent facts are added to context. `remember` refuses anything that looks like a credential or card number (`looksLikeSecret`), because prompting alone didn't stop Qwen3 4B from saving a password.
+
+The agent loop answers a repeated identical tool call from the earlier result instead of running it again. This breaks the search loops small models fall into.
+
+`dateContext(today)` spells out today and the next two weeks with weekdays, for a skill's `context`. Qwen3 4B got "this Friday" wrong 2 of 3 times when it had to count days itself.
 
 ## WebLLM performance and quality
 

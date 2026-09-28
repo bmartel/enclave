@@ -73,6 +73,7 @@ export function transformersEmbedder(options: TransformersEmbedderOptions = {}):
     id: `transformers:${preset.model}@${dimensions}`,
     locality: 'device',
     dimensions,
+    relevanceFloor: preset.relevanceFloor,
     embed(texts: string[], kind: EmbedKind) {
       const prefixed = kind === 'query' && preset.queryPrefix ? texts.map((t) => preset.queryPrefix + t) : texts
       return backend.embed(config, prefixed)

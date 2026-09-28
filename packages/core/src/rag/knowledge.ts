@@ -9,6 +9,8 @@ export interface KnowledgeOptions {
   /** Texts per embedding call. Default 32. */
   batchSize?: number
   chunk?: ChunkOptions
+  /** Search mode used when a search doesn't specify one. Default `hybrid`. */
+  defaultMode?: 'hybrid' | 'vector' | 'keyword'
   /** Cross-encoder applied to the top candidates of hybrid/vector search. */
   reranker?: Reranker
   /** Candidates fetched for reranking. Default max(limit × 3, 24), capped at 60. */
@@ -205,7 +207,7 @@ export class Knowledge {
 
   async search(query: string, options: SearchOptions = {}): Promise<SearchHit[]> {
     await this.init()
-    const mode = options.mode ?? 'hybrid'
+    const mode = options.mode ?? this.options.defaultMode ?? 'hybrid'
     const finalLimit = Math.max(1, Math.min(options.limit ?? 8, 100))
     const reranker = options.rerank === false || mode === 'keyword' ? undefined : this.options.reranker
     const limit = reranker ? Math.min(this.options.rerankCandidates ?? Math.max(finalLimit * 3, 24), 60) : finalLimit

@@ -1,0 +1,363 @@
+{
+  "date": "2026-09-28T14:03:49.486Z",
+  "queries": 91,
+  "rows": [
+    {
+      "label": "embeddinggemma hybrid",
+      "mode": "hybrid",
+      "recallAt3": 0.951,
+      "ci": [
+        0.89,
+        0.98
+      ],
+      "mrr": 0.899,
+      "ndcg": 0.91,
+      "msPerQuery": 51,
+      "byTag": {
+        "false-premise": "1/1",
+        "indirection": "0/1",
+        "keyword": "26/26",
+        "long-doc": "7/7",
+        "multilingual": "8/10",
+        "near-miss": "20/20",
+        "paraphrase": "31/33",
+        "table": "4/4",
+        "versioning": "5/5"
+      },
+      "misses": [
+        "how do visitors get internet access at headquarters → fac-offices, fac-parking-toronto, it-badges (want it-wifi-toronto)",
+        "can I charge my electric car at the office → fac-parking-berlin, fac-offices, hr-remote-work (want fac-parking-toronto)",
+        "when is the works council meeting → hr-remote-work, it-mobile-devices, fac-meeting-rooms (want de-berlin-intern)",
+        "lost and found in the berlin office → fac-parking-berlin, fac-offices, it-wifi-berlin (want de-berlin-intern)"
+      ]
+    },
+    {
+      "label": "embeddinggemma vector",
+      "mode": "vector",
+      "recallAt3": 0.995,
+      "ci": [
+        0.96,
+        1
+      ],
+      "mrr": 0.932,
+      "ndcg": 0.945,
+      "msPerQuery": 51,
+      "byTag": {
+        "false-premise": "1/1",
+        "indirection": "1/1",
+        "keyword": "26/26",
+        "long-doc": "7/7",
+        "multilingual": "10/10",
+        "near-miss": "20/20",
+        "paraphrase": "33/33",
+        "table": "4/4",
+        "versioning": "5/5"
+      },
+      "misses": []
+    },
+    {
+      "label": "keyword only",
+      "mode": "keyword",
+      "recallAt3": 0.874,
+      "ci": [
+        0.8,
+        0.93
+      ],
+      "mrr": 0.791,
+      "ndcg": 0.809,
+      "msPerQuery": 1,
+      "byTag": {
+        "false-premise": "1/1",
+        "indirection": "0/1",
+        "keyword": "26/26",
+        "long-doc": "7/7",
+        "multilingual": "4/10",
+        "near-miss": "18/20",
+        "paraphrase": "28/33",
+        "table": "4/4",
+        "versioning": "5/5"
+      },
+      "misses": [
+        "how do visitors get internet access at headquarters → fac-parking-berlin, fac-parking-toronto, fac-offices (want it-wifi-toronto)",
+        "what to do if my laptop is hacked → it-laptop-refresh, vendor-newsletter (want sec-incident)",
+        "can I charge my electric car at the office → fac-offices, fac-parking-berlin, prod-accessories (want fac-parking-toronto)",
+        "where can I leave my bicycle in berlin → ben-parental, fac-offices, de-berlin-intern (want fac-parking-berlin)",
+        "how quickly must we honor a deletion request → legal-privacy-requests, hr-vacation-2026, it-laptop-refresh (want legal-retention)",
+        "cafeteria opening hours in berlin → prod-specs, ben-enrollment, fac-parking-berlin (want de-berlin-intern)",
+        "when is the works council meeting → hr-remote-work, it-mobile-devices, it-passwords (want de-berlin-intern)",
+        "lost and found in the berlin office → fac-offices, fac-parking-berlin, it-wifi-berlin (want de-berlin-intern)",
+        "Wie viele Urlaubstage habe ich? →  (want hr-vacation-2026)",
+        "lunch hours at the berlin office → fac-offices, fac-parking-berlin, prod-specs (want de-berlin-intern)",
+        "Krankheitstage pro Jahr →  (want hr-sick-leave)"
+      ]
+    },
+    {
+      "label": "embeddinggemma hybrid + mxbai rerank",
+      "mode": "hybrid",
+      "recallAt3": 0.945,
+      "ci": [
+        0.88,
+        0.98
+      ],
+      "mrr": 0.908,
+      "ndcg": 0.918,
+      "msPerQuery": 631,
+      "byTag": {
+        "false-premise": "1/1",
+        "indirection": "1/1",
+        "keyword": "26/26",
+        "long-doc": "7/7",
+        "multilingual": "5/10",
+        "near-miss": "18/20",
+        "paraphrase": "33/33",
+        "table": "4/4",
+        "versioning": "5/5"
+      },
+      "misses": [
+        "lost and found in the berlin office → fac-parking-berlin, fac-offices, it-wifi-berlin (want de-berlin-intern)",
+        "Wie viele Urlaubstage habe ich? → ben-parental, de-berlin-intern, hr-onboarding (want hr-vacation-2026)",
+        "Wer genehmigt Ausgaben über 500 Dollar? → sup-refunds, de-berlin-intern, fin-travel-booking (want fin-expenses-2026)",
+        "lunch hours at the berlin office → fac-parking-berlin, it-wifi-berlin, fac-offices (want de-berlin-intern)",
+        "Krankheitstage pro Jahr → fin-travel-booking, de-berlin-intern, ben-enrollment (want hr-sick-leave)"
+      ]
+    },
+    {
+      "label": "embeddinggemma vector + mxbai rerank",
+      "mode": "vector",
+      "recallAt3": 0.934,
+      "ci": [
+        0.86,
+        0.97
+      ],
+      "mrr": 0.905,
+      "ndcg": 0.912,
+      "msPerQuery": 606,
+      "byTag": {
+        "false-premise": "1/1",
+        "indirection": "1/1",
+        "keyword": "26/26",
+        "long-doc": "7/7",
+        "multilingual": "5/10",
+        "near-miss": "18/20",
+        "paraphrase": "32/33",
+        "table": "4/4",
+        "versioning": "5/5"
+      },
+      "misses": [
+        "who runs the people team → hr-remote-work, hr-conduct, ben-parental (want org-leadership)",
+        "lost and found in the berlin office → fac-parking-berlin, fac-offices, it-wifi-berlin (want de-berlin-intern)",
+        "Wie viele Urlaubstage habe ich? → ben-parental, de-berlin-intern, hr-onboarding (want hr-vacation-2026)",
+        "Wer genehmigt Ausgaben über 500 Dollar? → sup-refunds, de-berlin-intern, fin-travel-booking (want fin-expenses-2026)",
+        "lunch hours at the berlin office → fac-parking-berlin, it-wifi-berlin, fac-offices (want de-berlin-intern)",
+        "Krankheitstage pro Jahr → fin-travel-booking, de-berlin-intern, ben-enrollment (want hr-sick-leave)"
+      ]
+    },
+    {
+      "label": "embeddinggemma hybrid + bge-m3 rerank",
+      "mode": "hybrid",
+      "recallAt3": 1,
+      "ci": [
+        0.96,
+        1
+      ],
+      "mrr": 0.973,
+      "ndcg": 0.98,
+      "msPerQuery": 3160,
+      "byTag": {
+        "false-premise": "1/1",
+        "indirection": "1/1",
+        "keyword": "26/26",
+        "long-doc": "7/7",
+        "multilingual": "10/10",
+        "near-miss": "20/20",
+        "paraphrase": "33/33",
+        "table": "4/4",
+        "versioning": "5/5"
+      },
+      "misses": []
+    },
+    {
+      "label": "granite-small-r2 hybrid",
+      "mode": "hybrid",
+      "recallAt3": 0.929,
+      "ci": [
+        0.86,
+        0.97
+      ],
+      "mrr": 0.822,
+      "ndcg": 0.847,
+      "msPerQuery": 4,
+      "byTag": {
+        "false-premise": "1/1",
+        "indirection": "0/1",
+        "keyword": "26/26",
+        "long-doc": "7/7",
+        "multilingual": "6/10",
+        "near-miss": "18/20",
+        "paraphrase": "31/33",
+        "table": "4/4",
+        "versioning": "5/5"
+      },
+      "misses": [
+        "how do visitors get internet access at headquarters → it-badges, fac-guests, fac-offices (want it-wifi-toronto)",
+        "can I charge my electric car at the office → fac-parking-berlin, prod-accessories, hr-remote-work (want fac-parking-toronto)",
+        "when is the works council meeting → hr-remote-work, it-mobile-devices, fac-meeting-rooms (want de-berlin-intern)",
+        "Wie viele Urlaubstage habe ich? → de-berlin-intern, it-wifi-berlin, fac-parking-berlin (want hr-vacation-2026)",
+        "lunch hours at the berlin office → fac-kitchen-toronto, fac-offices, fac-parking-berlin (want de-berlin-intern)",
+        "Krankheitstage pro Jahr → de-berlin-intern, fac-guests, ben-parental (want hr-sick-leave)"
+      ]
+    },
+    {
+      "label": "granite-small-r2 vector",
+      "mode": "vector",
+      "recallAt3": 0.918,
+      "ci": [
+        0.85,
+        0.96
+      ],
+      "mrr": 0.791,
+      "ndcg": 0.819,
+      "msPerQuery": 4,
+      "byTag": {
+        "false-premise": "1/1",
+        "indirection": "1/1",
+        "keyword": "24/26",
+        "long-doc": "6/7",
+        "multilingual": "7/10",
+        "near-miss": "19/20",
+        "paraphrase": "32/33",
+        "table": "4/4",
+        "versioning": "5/5"
+      },
+      "misses": [
+        "how far in advance must I request time off → eng-oncall, hr-remote-work, hr-vacation-2024 (want hr-vacation-2026)",
+        "deadline to submit receipts → sup-escalation, sup-refunds, sup-sla (want fin-expenses-2026)",
+        "can I claim my gym membership → it-badges, it-passwords, hr-vacation-2024 (want fin-expenses-2026)",
+        "warranty length for scanners → prod-specs, legal-retention, it-printers (want prod-troubleshooting)",
+        "when is the works council meeting → fac-meeting-rooms, hr-remote-work, it-mobile-devices (want de-berlin-intern)",
+        "Wie viele Urlaubstage habe ich? → de-berlin-intern, it-wifi-berlin, fac-parking-berlin (want hr-vacation-2026)",
+        "Krankheitstage pro Jahr → de-berlin-intern, fac-guests, ben-parental (want hr-sick-leave)"
+      ]
+    },
+    {
+      "label": "granite-multilingual-r2 hybrid",
+      "mode": "hybrid",
+      "recallAt3": 0.951,
+      "ci": [
+        0.89,
+        0.98
+      ],
+      "mrr": 0.852,
+      "ndcg": 0.874,
+      "msPerQuery": 4,
+      "byTag": {
+        "false-premise": "1/1",
+        "indirection": "0/1",
+        "keyword": "26/26",
+        "long-doc": "7/7",
+        "multilingual": "8/10",
+        "near-miss": "20/20",
+        "paraphrase": "31/33",
+        "table": "4/4",
+        "versioning": "5/5"
+      },
+      "misses": [
+        "how do visitors get internet access at headquarters → it-badges, fac-offices, it-vpn-2026 (want it-wifi-toronto)",
+        "can I charge my electric car at the office → fac-parking-berlin, fac-offices, hr-remote-work (want fac-parking-toronto)",
+        "when is the works council meeting → fac-meeting-rooms, hr-remote-work, it-mobile-devices (want de-berlin-intern)",
+        "lost and found in the berlin office → fac-parking-berlin, it-wifi-berlin, fac-offices (want de-berlin-intern)"
+      ]
+    },
+    {
+      "label": "granite-multilingual-r2 vector",
+      "mode": "vector",
+      "recallAt3": 0.945,
+      "ci": [
+        0.88,
+        0.98
+      ],
+      "mrr": 0.795,
+      "ndcg": 0.835,
+      "msPerQuery": 4,
+      "byTag": {
+        "false-premise": "1/1",
+        "indirection": "1/1",
+        "keyword": "25/26",
+        "long-doc": "6/7",
+        "multilingual": "8/10",
+        "near-miss": "19/20",
+        "paraphrase": "33/33",
+        "table": "4/4",
+        "versioning": "5/5"
+      },
+      "misses": [
+        "can I claim my gym membership → it-badges, hr-vacation-2024, ben-enrollment (want fin-expenses-2026)",
+        "when should the battery be replaced → prod-firmware-notes, it-laptop-refresh, prod-accessories (want prod-troubleshooting)",
+        "when is the works council meeting → fac-meeting-rooms, eng-oncall, fin-commission (want de-berlin-intern)",
+        "lost and found in the berlin office → fac-parking-berlin, it-wifi-berlin, it-badges (want de-berlin-intern)",
+        "does premium economy apply to meal limits → fin-expenses-2023, fin-expenses-2026, hr-vacation-2026 (want fin-travel-booking)"
+      ]
+    },
+    {
+      "label": "gte-small hybrid",
+      "mode": "hybrid",
+      "recallAt3": 0.929,
+      "ci": [
+        0.86,
+        0.97
+      ],
+      "mrr": 0.861,
+      "ndcg": 0.875,
+      "msPerQuery": 4,
+      "byTag": {
+        "false-premise": "1/1",
+        "indirection": "0/1",
+        "keyword": "26/26",
+        "long-doc": "7/7",
+        "multilingual": "6/10",
+        "near-miss": "19/20",
+        "paraphrase": "31/33",
+        "table": "4/4",
+        "versioning": "5/5"
+      },
+      "misses": [
+        "how do visitors get internet access at headquarters → fac-offices, it-badges, fac-parking-toronto (want it-wifi-toronto)",
+        "can I charge my electric car at the office → fac-parking-berlin, fac-offices, prod-accessories (want fac-parking-toronto)",
+        "when is the works council meeting → fac-meeting-rooms, hr-remote-work, hr-onboarding (want de-berlin-intern)",
+        "lost and found in the berlin office → fac-parking-berlin, fac-offices, it-wifi-berlin (want de-berlin-intern)",
+        "Wie viele Urlaubstage habe ich? → de-berlin-intern, it-wifi-berlin, hr-vacation-2024 (want hr-vacation-2026)",
+        "Krankheitstage pro Jahr → de-berlin-intern, it-wifi-berlin, org-leadership (want hr-sick-leave)"
+      ]
+    },
+    {
+      "label": "gte-small vector",
+      "mode": "vector",
+      "recallAt3": 0.945,
+      "ci": [
+        0.88,
+        0.98
+      ],
+      "mrr": 0.886,
+      "ndcg": 0.901,
+      "msPerQuery": 5,
+      "byTag": {
+        "false-premise": "1/1",
+        "indirection": "1/1",
+        "keyword": "26/26",
+        "long-doc": "5/7",
+        "multilingual": "7/10",
+        "near-miss": "19/20",
+        "paraphrase": "33/33",
+        "table": "4/4",
+        "versioning": "5/5"
+      },
+      "misses": [
+        "when should the battery be replaced → it-laptop-refresh, eng-oncall, it-badges (want prod-troubleshooting)",
+        "warranty length for scanners → prod-specs, sup-refunds, it-badges (want prod-troubleshooting)",
+        "when is the works council meeting → fac-meeting-rooms, hr-vacation-2026, hr-holidays-2026 (want de-berlin-intern)",
+        "Wie viele Urlaubstage habe ich? → de-berlin-intern, it-wifi-berlin, hr-vacation-2024 (want hr-vacation-2026)",
+        "Krankheitstage pro Jahr → de-berlin-intern, it-wifi-berlin, org-leadership (want hr-sick-leave)"
+      ]
+    }
+  ]
+}
