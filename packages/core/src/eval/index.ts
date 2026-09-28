@@ -62,7 +62,7 @@ export interface EvalCase {
   tags?: string[]
   /** Approval decision for tools that need it. Default: approve. */
   approve?: boolean | ApprovalHandler
-  /** Fail the case if it runs longer than this. Default: EvalOptions.caseTimeoutMs. */
+  /** Fail a turn that runs longer than this. Default: EvalOptions.turnTimeoutMs. */
   timeoutMs?: number
 }
 
@@ -153,8 +153,8 @@ export interface EvalOptions {
   onApproval?: ApprovalHandler
   onResult?(result: CaseResult): void
   signal?: AbortSignal
-  /** Per-case time limit. Default 5 minutes. */
-  caseTimeoutMs?: number
+  /** Time limit for each turn (one user message and the agent's full response). Default 4 minutes. */
+  turnTimeoutMs?: number
   /** Only run cases carrying at least one of these tags. */
   tags?: string[]
 }
@@ -189,8 +189,7 @@ function turnsOf(testCase: EvalCase): EvalTurn[] {
 async function runCase(ai: Enclave, testCase: EvalCase, repeat: number, options: EvalOptions): Promise<CaseResult> {
   const turns: TurnResult[] = []
   const threads = new Map<string, ReturnType<Enclave['thread']>>()
-  const timeout = AbortSignal.timeout(testCase.timeoutMs ?? options.caseTimeoutMs ?? 300_000)
-  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout
+  const turnTimeout = testCase.timeoutMs ?? options.turnTimeoutMs ?? 240_000
   let aborted = false
 
   try {
@@ -201,6 +200,9 @@ async function runCase(ai: Enclave, testCase: EvalCase, repeat: number, options:
       if (!thread) threads.set(key, (thread = ai.thread()))
       const decision = turn.approve ?? testCase.approve ?? options.onApproval ?? true
       const onApproval: ApprovalHandler = typeof decision === 'function' ? decision : () => decision
+      // Timed per turn: a later turn in a long conversation gets the same budget.
+      const timeout = AbortSignal.timeout(turnTimeout)
+      const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout
       const started = performance.now()
       const events: AgentEvent[] = []
       const failures: string[] = []

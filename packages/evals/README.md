@@ -47,6 +47,34 @@ Reports give pass rates with 95% Wilson intervals, per-tag breakdowns, and consi
 
 `src/retrieval.ts` has 91 labeled queries covering keyword, paraphrase, versioning, near-miss, long-document, table, false-premise and multilingual lookups (German, French and Spanish queries, and a German document). `test/retrieval.e2e.test.ts` runs them with real embedding models and rerankers on CPU, and writes `reports/retrieval.json`.
 
+## Results (Qwen3 4B, WebGPU, 3 repeats)
+
+| Report | Runs passed | Cases passing all repeats |
+|---|---|---|
+| `default` (baseline) | 75% [69–81%] | 72% |
+| `fixes` | **86% [80–90%]** | **82%** |
+
+The baseline's failures clustered around a few causes, each fixed in the library:
+
+| Cause | Fix |
+|---|---|
+| Irrelevant auto-retrieved passages on every message | Per-embedder relevance floor and a relative cutoff |
+| Prompt injection via a retrieved document | Passages framed as untrusted; instruction-bearing passages flagged or dropped |
+| Storing a password in memory | `remember` refuses secrets |
+| A search loop | Repeated identical tool calls are answered from history |
+| Pronoun follow-ups | Short follow-ups are searched with the previous question |
+
+11 cases improved and 1 regressed (`rag: procedure first step`, 3/3 → 2/3).
+
+`old-retrieval` (the mxbai reranker with hybrid search) scored 65% vs 73% for the default on the same 37 cases. That is within noise, but it matches the CPU benchmark, so there is no default reranker.
+
+Still failing:
+- SQL questions whose wording doesn't match the schema.
+- Asking which of two same-named contacts is meant.
+- Updating a remembered fact.
+- Keeping a fact from two turns earlier in a summary.
+- Multi-hop lookups (role → person).
+
 ## Relevance calibration
 
 `test/relevance.e2e.test.ts` measures each embedder's top similarity for 95 on-topic questions and 18 conversational messages: commands, follow-ups, chit-chat, and requests meant for other tools. The results set each preset's `relevanceFloor`, the threshold below which auto-retrieval stays silent.
