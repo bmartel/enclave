@@ -13,7 +13,8 @@ beforeAll(async () => {
 })
 
 const find = crmSkill.tools!.find_contacts!
-const run = (query: string) => find.execute({ query }, { db: ai.db } as never) as Promise<{ id: number; company: string }[]>
+type Contact = { id: number; name: string; company: string }
+const run = (query: string) => find.execute({ query }, { db: ai.db } as never) as unknown as Promise<Contact[]>
 
 describe('crm find_contacts', () => {
   it('matches every word against name and company', async () => {

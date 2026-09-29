@@ -31,6 +31,14 @@ export interface WebLLMOptions {
    */
   thinking?: ThinkingMode
   /**
+   * Most reasoning tokens per step. Past it, reasoning is closed and the step
+   * is re-asked with thinking off, so a long deliberation can't stall a turn.
+   * Late in a long conversation, Qwen3 4B decodes at about 6 tokens/s. In the
+   * evals, 90% of steps used under 500 tokens, and the only runaway (1,500+
+   * tokens of reasoning) hit the 4-minute turn limit. Default 1024; 0 disables.
+   */
+  thinkingBudget?: number
+  /**
    * Constrain decoding so every `<tool_call>` is a real tool with schema-valid
    * arguments (xgrammar structural tags). Free text is unaffected. Default true.
    */
@@ -134,6 +142,7 @@ export function webllm(options: WebLLMOptions): WebLLMModel {
   const key = `${modelId}@${contextWindow}`
   const slot = slotFor(options.worker, options.appConfig)
   const thinkingMode = options.thinking ?? 'auto'
+  const budget = options.thinkingBudget ?? 1024
   const qwen3 = /^Qwen3/i.test(modelId)
 
   const load = async (): Promise<void> => {
@@ -176,7 +185,7 @@ export function webllm(options: WebLLMOptions): WebLLMModel {
           if (slot.badGrammars.has(grammar)) grammar = undefined
         }
 
-        const request = (withGrammar: boolean) =>
+        const request = (withGrammar: boolean, think = thinking) =>
           engine.chat.completions.create({
             stream: true,
             stream_options: { include_usage: true },
@@ -184,7 +193,7 @@ export function webllm(options: WebLLMOptions): WebLLMModel {
             ...(stop?.length ? { stop } : {}),
             ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
             ...(options.maxTokens !== undefined ? { max_tokens: options.maxTokens } : {}),
-            ...(qwen3 ? { extra_body: { enable_thinking: thinking } } : {}),
+            ...(qwen3 ? { extra_body: { enable_thinking: think } } : {}),
             ...(withGrammar && grammar
               ? { response_format: { type: 'structural_tag' as const, structural_tag: grammar } }
               : {}),
@@ -204,14 +213,42 @@ export function webllm(options: WebLLMOptions): WebLLMModel {
         signal?.addEventListener('abort', onAbort, { once: true })
         let output = ''
         let usage: CompletionUsage | undefined
+        let reasoningTokens = 0
+        let inThink: boolean | undefined // undefined until the reply's opening is seen
+        let overBudget = false
         try {
           for await (const chunk of chunks) {
+            // Once interrupted, drain the stream without using it. Breaking out
+            // would strand a worker engine's generator (worker streams are
+            // pulled chunk by chunk), and the next request would wait forever.
+            if (overBudget) continue
             const delta = chunk.choices[0]?.delta?.content
             if (delta) {
               output += delta
               yield delta
+              if (inThink === undefined && output.trimStart().length >= 7) inThink = output.trimStart().startsWith('<think>')
+              if (inThink && delta.includes('</think>')) inThink = false
+              // Streamed chunks are single tokens; count those inside <think>.
+              if (thinking && budget > 0 && inThink && ++reasoningTokens > budget) {
+                overBudget = true
+                await engine.interruptGenerate()
+              }
             }
             if (chunk.usage) usage = chunk.usage
+          }
+          if (overBudget) {
+            // Close the reasoning, then answer from the same prompt without thinking.
+            yield '\n</think>\n\n'
+            const answer = await request(!!grammar && !slot.badGrammars.has(grammar), false)
+            output = ''
+            for await (const chunk of answer) {
+              const delta = chunk.choices[0]?.delta?.content
+              if (delta) {
+                output += delta
+                yield delta
+              }
+              if (chunk.usage) usage = chunk.usage
+            }
           }
         } finally {
           signal?.removeEventListener('abort', onAbort)
@@ -227,6 +264,7 @@ export function webllm(options: WebLLMOptions): WebLLMModel {
             metrics: {
               prefillTokens: usage.prompt_tokens,
               kvCacheReused: reuse,
+              ...(overBudget ? { thinkingCutOff: true } : {}),
               ...(extra
                 ? {
                     timeToFirstTokenMs: Math.round(extra.time_to_first_token_s * 1000),

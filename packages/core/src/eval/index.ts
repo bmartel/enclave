@@ -86,6 +86,10 @@ export interface TurnResult {
   /** Older reasoning was compacted during this turn. */
   compacted: boolean
   kvReuseRate: number | undefined
+  /** Characters of reasoning streamed during the turn. */
+  reasoningChars: number
+  /** End of the turn's reasoning, kept for failed turns (why did it time out?). */
+  reasoningTail?: string
 }
 
 export interface CaseResult {
@@ -221,7 +225,7 @@ async function runCase(ai: Enclave, testCase: EvalCase, repeat: number, options:
       index: turns.length, input: '(setup)', graded: true, passed: false,
       failures: [`setup failed: ${error instanceof Error ? error.message : String(error)}`],
       text: '', calls: [], toolErrors: 0, steps: 0, durationMs: 0, timeToFirstTokenMs: undefined,
-      prefillTokens: 0, outputTokens: 0, promptChars: undefined, compacted: false, kvReuseRate: undefined,
+      prefillTokens: 0, outputTokens: 0, promptChars: undefined, compacted: false, kvReuseRate: undefined, reasoningChars: 0,
     })
     aborted = true
   } finally {
@@ -266,6 +270,7 @@ async function gradeTurn(
   const finish = events.findLast((e) => e.type === 'finish')
   const last = events.findLast((e) => e.type === 'message' && e.message.role === 'assistant')
   const text = last?.type === 'message' ? last.message.content : ''
+  const reasoning = events.map((e) => (e.type === 'reasoning-delta' ? e.delta : '')).join('')
   const expect = turn.expect
 
   if (expect) {
@@ -308,6 +313,8 @@ async function gradeTurn(
     promptChars: promptSizes.length ? Math.max(...promptSizes) : undefined,
     compacted: metrics.some((m) => m.compacted),
     kvReuseRate: withReuse.length ? withReuse.filter((m) => m.kvCacheReused).length / withReuse.length : undefined,
+    reasoningChars: reasoning.length,
+    ...(failures.length && reasoning ? { reasoningTail: reasoning.slice(-1500) } : {}),
   }
 }
 

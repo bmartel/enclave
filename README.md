@@ -256,6 +256,9 @@ Enclave's prompt layout, decoding and agent loop are built around how WebLLM act
   Measured on Qwen3 4B: after a tool result, the next step prefilled 250 tokens instead of the whole prompt, and time to first token fell from 2.2 s to 0.7 s.
 - **Grammar-constrained tool calls.** WebLLM's xgrammar structural tags leave text free. Once the model writes `<tool_call>`, it can only complete a call to a real tool, with arguments that validate against that tool's schema. Schemas xgrammar can't compile fall back to unconstrained decoding.
 - **Adaptive thinking.** Qwen3 reasons before acting and answers directly after tool results.
+- **Thinking budget** (`webllm: { thinkingBudget }`, default 1024 tokens). Past the budget, reasoning is closed and the step is re-asked with thinking off.
+  - Deep into a conversation, Qwen3 4B decodes at about 6 tokens/s. One eval turn reasoned for 1,500 tokens and hit the 4-minute limit without answering.
+  - 90% of steps use under 500 tokens, so the budget only touches outliers. Cut-off steps report `metrics.thinkingCutOff`.
 - **Reasoning history** (`webllm: { reasoningHistory }`), measured on 3 conversations × 3 repeats (33 graded later turns):
 
   | Mode | Later turns passed | Time to first token (later turns) | Behaviour |

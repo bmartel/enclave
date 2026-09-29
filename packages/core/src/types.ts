@@ -87,6 +87,8 @@ export interface StepMetrics {
   grammarInitMs?: number
   /** True when the engine continued from its KV cache instead of re-reading the prompt. */
   kvCacheReused?: boolean
+  /** Reasoning hit the thinking budget and the step was answered without thinking. */
+  thinkingCutOff?: boolean
 }
 
 export type FinishReason = 'stop' | 'tool-calls' | 'length' | 'refusal' | 'error'
