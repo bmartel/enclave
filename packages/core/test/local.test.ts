@@ -87,10 +87,12 @@ describe('ollama', () => {
     expect(plain.bodies[0].think).toBe(false)
   })
 
-  it('reports prefill/decode speed and cache reuse', async () => {
-    const { fetch } = recorder([], { prompt_eval_count: 12, prompt_eval_duration: 60e6, eval_count: 30, eval_duration: 1e9 })
-    const chunks = await collect(ollama({ model: 'm', fetch }).stream({ system: 'x'.repeat(4000), tools: [], messages: [{ role: 'user', content: 'q' }] }))
-    expect(chunks.at(-1)).toMatchObject({ metrics: { prefillTokens: 12, prefillTokensPerSec: 200, decodeTokensPerSec: 30, kvCacheReused: true } })
+  it('reports prompt read time and decode speed (prompt_eval_count includes cached tokens)', async () => {
+    const { fetch } = recorder([], { prompt_eval_count: 1424, prompt_eval_duration: 287e6, eval_count: 30, eval_duration: 1e9 })
+    const chunks = await collect(ollama({ model: 'm', fetch }).stream({ system: 'x', tools: [], messages: [{ role: 'user', content: 'q' }] }))
+    const finish = chunks.at(-1) as unknown as { metrics: Record<string, unknown> }
+    expect(finish.metrics).toMatchObject({ prefillMs: 287, decodeTokensPerSec: 30 })
+    expect(finish.metrics).not.toHaveProperty('kvCacheReused')
   })
 
   it('explains unreachable servers', async () => {

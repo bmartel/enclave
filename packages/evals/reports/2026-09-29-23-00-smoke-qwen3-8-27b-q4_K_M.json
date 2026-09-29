@@ -1,0 +1,214 @@
+{
+  "label": "smoke-qwen3-8-27b-q4_K_M",
+  "passRate": 1,
+  "overall": {
+    "passed": 1,
+    "total": 1,
+    "rate": 1,
+    "low": 0.20654329147389294,
+    "high": 1
+  },
+  "consistency": {
+    "allRepeats": {
+      "passed": 1,
+      "total": 1,
+      "rate": 1,
+      "low": 0.20654329147389294,
+      "high": 1
+    },
+    "anyRepeat": {
+      "passed": 1,
+      "total": 1,
+      "rate": 1,
+      "low": 0.20654329147389294,
+      "high": 1
+    },
+    "repeats": 1
+  },
+  "byTag": [
+    {
+      "tag": "arguments",
+      "passed": 1,
+      "total": 1,
+      "rate": 1,
+      "low": 0.20654329147389294,
+      "high": 1
+    },
+    {
+      "tag": "skill",
+      "passed": 1,
+      "total": 1,
+      "rate": 1,
+      "low": 0.20654329147389294,
+      "high": 1
+    }
+  ],
+  "results": [
+    {
+      "name": "crm: create ticket via name lookup",
+      "tags": [
+        "skill",
+        "arguments"
+      ],
+      "repeat": 0,
+      "passed": true,
+      "failures": [],
+      "text": "Done — ticket #5 created for Grace Hopper (Initech): \"Scanner won't charge,\" normal priority, due Oct 10, 2026.",
+      "calls": [
+        {
+          "name": "find_contacts",
+          "input": {
+            "query": "Grace Hopper"
+          }
+        },
+        {
+          "name": "create_ticket",
+          "input": {
+            "contact_id": 2,
+            "title": "Scanner won't charge",
+            "priority": "normal",
+            "due_date": "2026-10-10"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 3,
+      "durationMs": 48514,
+      "timeToFirstTokenMs": 34988,
+      "prefillTokens": 8456,
+      "outputTokens": 215,
+      "kvReuseRate": 0,
+      "turns": [
+        {
+          "index": 0,
+          "input": "Open a ticket for Grace Hopper: her scanner won't charge. Normal priority, due October 10, 2026.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "Done — ticket #5 created for Grace Hopper (Initech): \"Scanner won't charge,\" normal priority, due Oct 10, 2026.",
+          "calls": [
+            {
+              "name": "find_contacts",
+              "input": {
+                "query": "Grace Hopper"
+              }
+            },
+            {
+              "name": "create_ticket",
+              "input": {
+                "contact_id": 2,
+                "title": "Scanner won't charge",
+                "priority": "normal",
+                "due_date": "2026-10-10"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 3,
+          "durationMs": 48514,
+          "timeToFirstTokenMs": 34988,
+          "prefillTokens": 8456,
+          "outputTokens": 215,
+          "promptChars": 6676,
+          "compacted": false,
+          "kvReuseRate": 0,
+          "reasoningChars": 257
+        }
+      ]
+    }
+  ],
+  "byCase": [
+    {
+      "name": "crm: create ticket via name lookup",
+      "tags": [
+        "skill",
+        "arguments"
+      ],
+      "passRate": 1,
+      "passed": 1,
+      "runs": 1,
+      "meanMs": 48514,
+      "failures": []
+    }
+  ],
+  "latency": {
+    "meanMs": 48514,
+    "p50Ms": 48514,
+    "p90Ms": 48514,
+    "ttftP50Ms": 34988
+  },
+  "tokens": {
+    "meanOutput": 215,
+    "meanPrefill": 8456
+  },
+  "toolErrorRate": 0,
+  "kvReuseRate": 0,
+  "config": {
+    "model": "ollama:qwen3.8:27b-q4_K_M",
+    "thinking": "auto",
+    "reasoningHistory": "current-turn",
+    "constrainToolCalls": true,
+    "embedding": "auto",
+    "reranker": "auto",
+    "searchMode": null,
+    "repeats": 1,
+    "only": "crm: create ticket via name lookup",
+    "ctx": 32768
+  },
+  "environment": {
+    "device": {
+      "webgpu": true,
+      "shaderF16": true,
+      "adapter": {
+        "vendor": "apple",
+        "architecture": "metal-3",
+        "description": ""
+      },
+      "maxStorageBufferMB": 4096,
+      "deviceMemoryGB": 32,
+      "mobile": false,
+      "gpuBudgetMB": 16384,
+      "crossOriginIsolated": false,
+      "storage": {
+        "quotaMB": 12928,
+        "usageMB": 2688,
+        "persisted": true
+      }
+    },
+    "plan": {
+      "llm": {
+        "id": "ollama:qwen3.8:27b-q4_K_M"
+      },
+      "embedding": {
+        "id": "embeddinggemma",
+        "label": "EmbeddingGemma 300M (best quality, 100+ languages)",
+        "model": "onnx-community/embeddinggemma-300m-ONNX",
+        "dimensions": 768,
+        "method": "sentence_embedding",
+        "queryPrefix": "task: search result | query: ",
+        "documentTemplate": "title: {title} | text: {text}",
+        "matryoshka": [
+          768,
+          512,
+          256,
+          128
+        ],
+        "dtype": {
+          "webgpu": "q4",
+          "webgpuF32": "q4",
+          "wasm": "q8"
+        },
+        "downloadMB": 197,
+        "maxTokens": 2048,
+        "languages": "multilingual",
+        "license": "gemma",
+        "searchMode": "vector",
+        "relevanceFloor": 0.35
+      }
+    },
+    "model": "ollama:qwen3.8:27b-q4_K_M",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36"
+  },
+  "commit": "83ba802",
+  "wallClockSec": 54
+}

@@ -81,6 +81,8 @@ export interface StepMetrics {
   /** Older reasoning was dropped this step to stay within the window (`reasoningHistory: 'auto'`). */
   compacted?: boolean
   timeToFirstTokenMs?: number
+  /** Time spent reading the prompt this step (small when a cached prefix was reused). */
+  prefillMs?: number
   prefillTokensPerSec?: number
   decodeTokensPerSec?: number
   /** Time spent compiling the tool-call grammar for this step. */

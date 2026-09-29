@@ -135,19 +135,15 @@ export function ollama(options: OllamaOptions): Model {
         }
         if (chunk.done) {
           reason = chunk.done_reason === 'length' ? 'length' : calls ? 'tool-calls' : 'stop'
-          const prefilled = chunk.prompt_eval_count ?? 0
-          usage = { inputTokens: prefilled, outputTokens: chunk.eval_count ?? 0 }
-          const perSec = (count?: number, ns?: number) => (count && ns ? Math.round(count / (ns / 1e9)) : undefined)
-          const prefillRate = perSec(chunk.prompt_eval_count, chunk.prompt_eval_duration)
-          const decodeRate = perSec(chunk.eval_count, chunk.eval_duration)
+          usage = { inputTokens: chunk.prompt_eval_count ?? 0, outputTokens: chunk.eval_count ?? 0 }
+          const decodeRate = chunk.eval_count && chunk.eval_duration ? Math.round(chunk.eval_count / (chunk.eval_duration / 1e9)) : undefined
+          // Ollama's prompt_eval_count is the whole prompt, cached tokens
+          // included, so it can't show cache reuse or prefill speed; the time
+          // spent reading the prompt can (a reused cache makes it a fraction).
           metrics = {
-            prefillTokens: prefilled,
             promptChars,
-            // Ollama counts only the tokens it had to evaluate; far fewer than
-            // the prompt's size means the cached prefix was reused.
-            kvCacheReused: prefilled < promptChars / CHARS_PER_TOKEN_ESTIMATE / 2,
+            ...(chunk.prompt_eval_duration !== undefined ? { prefillMs: Math.round(chunk.prompt_eval_duration / 1e6) } : {}),
             ...(firstTokenMs !== undefined ? { timeToFirstTokenMs: firstTokenMs } : {}),
-            ...(prefillRate ? { prefillTokensPerSec: prefillRate } : {}),
             ...(decodeRate ? { decodeTokensPerSec: decodeRate } : {}),
           }
         }
@@ -156,9 +152,6 @@ export function ollama(options: OllamaOptions): Model {
     },
   }
 }
-
-/** Rough characters per token for JSON-wrapped English prompts. */
-const CHARS_PER_TOKEN_ESTIMATE = 4
 
 /**
  * Context goes on the newest user message, frozen as first sent, so every step
