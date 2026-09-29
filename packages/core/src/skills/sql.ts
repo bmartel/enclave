@@ -120,10 +120,13 @@ async function describe(db: Db, schemas: string[], table?: string): Promise<stri
     type: string
     not_null: boolean
     default_value: string | null
+    column_comment: string | null
+    table_comment: string | null
   }>(
     `select n.nspname as table_schema, c.relname as table_name, a.attname as column_name,
             format_type(a.atttypid, a.atttypmod) as type, a.attnotnull as not_null,
-            pg_get_expr(d.adbin, d.adrelid) as default_value
+            pg_get_expr(d.adbin, d.adrelid) as default_value,
+            col_description(c.oid, a.attnum) as column_comment, obj_description(c.oid, 'pg_class') as table_comment
      from pg_attribute a
        join pg_class c on c.oid = a.attrelid
        join pg_namespace n on n.oid = c.relnamespace
@@ -144,17 +147,30 @@ async function describe(db: Db, schemas: string[], table?: string): Promise<stri
     [schemas, table ?? null],
   )
 
-  const tables = new Map<string, string[]>()
+  // COMMENT ON is where apps document business rules ("revenue excludes
+  // cancelled orders"); the model sees them as SQL comments.
+  const tables = new Map<string, { def: string; comment?: string }[]>()
+  const notes = new Map<string, string>()
   for (const c of columns) {
     const key = schemas.length === 1 ? c.table_name : `${c.table_schema}.${c.table_name}`
     const parts = [c.column_name, c.type]
     if (c.not_null) parts.push('not null')
     if (c.default_value) parts.push(`default ${c.default_value}`)
-    tables.set(key, [...(tables.get(key) ?? []), parts.join(' ')])
+    if (c.table_comment) notes.set(key, oneLine(c.table_comment))
+    const line = { def: parts.join(' '), ...(c.column_comment ? { comment: oneLine(c.column_comment) } : {}) }
+    tables.set(key, [...(tables.get(key) ?? []), line])
   }
   for (const k of constraints) {
     const key = schemas.length === 1 ? k.table_name : `${k.table_schema}.${k.table_name}`
-    tables.get(key)?.push(k.def)
+    tables.get(key)?.push({ def: k.def })
   }
-  return [...tables].map(([name, lines]) => `table ${name} (\n  ${lines.join(',\n  ')}\n)`).join('\n')
+  return [...tables]
+    .map(([name, lines]) => {
+      const body = lines.map((l, i) => `${l.def}${i < lines.length - 1 ? ',' : ''}${l.comment ? ` -- ${l.comment}` : ''}`)
+      const note = notes.get(name)
+      return `${note ? `-- ${note}\n` : ''}table ${name} (\n  ${body.join('\n  ')}\n)`
+    })
+    .join('\n')
 }
+
+const oneLine = (text: string) => text.replace(/\s+/g, ' ').trim()

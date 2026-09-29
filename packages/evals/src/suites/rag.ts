@@ -92,7 +92,7 @@ export const ragCases: ProductionCase[] = [
     // Wiping or reinstalling may only appear as something not to do.
     expect: { answer: [/disconnect|unplug|turn off (the )?wi-?fi|off the network/i, onlyQualified(/\b(wipe|reinstall)/i, NEGATION)] },
     variants: {
-      pass: ["Disconnect it from the network right away (turn off wifi or unplug the cable), but don't shut it down [1]. Do not wipe or reinstall it.", 'Unplug the network cable or turn off wifi first [1].'],
+      pass: ["Disconnect it from the network right away (turn off wifi or unplug the cable), but don't shut it down [1]. Do not wipe or reinstall it.", 'Unplug the network cable or turn off wifi first [1].', 'The first step is to disconnect the device from the network [1]. Preserve evidence by avoiding rebooting, wiping, or reinstalling the device.'],
       fail: ['Run a full antivirus scan and reinstall the operating system.', 'First, wipe the device to remove the malware.'],
     },
     reference: [{ answer: 'First, disconnect it from the network (turn off wifi or unplug the cable) but do not shut it down [1]. Then report it to security within one hour.' }],

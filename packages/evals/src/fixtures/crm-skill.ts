@@ -61,16 +61,25 @@ export const crmSkill = defineSkill({
       description: 'Search contacts by name and/or company (every word must match). Returns id, name, company, email.',
       input: z.object({ query: z.string().min(1) }),
       // Every word must appear in the name or company, so "Wei Chen Umbrella" works.
-      execute: async ({ query }, { db }) =>
-        (
-          await db.query(
-            `select id, name, company, email from crm_contacts c
-             where (select bool_and(c.name || ' ' || c.company ilike '%' || w || '%')
-                    from unnest(regexp_split_to_array(trim($1), '\s+')) as w)
-             order by id`,
-            [query],
-          )
-        ).rows,
+      execute: async ({ query }, { db }) => {
+        const { rows } = await db.query<{ id: number; name: string; company: string; email: string }>(
+          `select id, name, company, email from crm_contacts c
+           where (select bool_and(c.name || ' ' || c.company ilike '%' || w || '%')
+                  from unnest(regexp_split_to_array(trim($1), '\\s+')) as w)
+           order by id`,
+          [query],
+        )
+        return rows
+      },
+      // A tool result can steer a small model better than instructions can:
+      // say plainly when a lookup is ambiguous.
+      toModelOutput: (rows: { name: string }[]) => {
+        const names = rows.map((r) => r.name.toLowerCase())
+        const ambiguous = names.length > 1 && new Set(names).size < names.length
+        return ambiguous
+          ? { contacts: rows, note: 'Several contacts share this name. Unless the user already said which one, ask them which company before acting.' }
+          : rows
+      },
     }),
     create_ticket: tool({
       description: 'Create a support ticket for a contact.',

@@ -59,16 +59,29 @@ export function memorySkill(options: MemorySkillOptions = {}) {
         execute: async ({ id }, ctx) => ({ deleted: await requireKnowledge(ctx).remove(id) }),
       }),
     },
-    context: async ({ db, knowledge }) => {
-      if (!knowledge || recent <= 0) return undefined
-      await knowledge.init()
-      const { rows } = await db.query<{ id: string; content: string }>(
-        `select d.id, c.content from enclave.documents d join enclave.chunks c on c.document_id = d.id
-         where d.collection = $1 order by d.created_at desc limit $2`,
-        [collection, recent],
-      )
-      if (!rows.length) return undefined
-      return `Known about the user:\n${rows.map((r) => `- (${r.id}) ${r.content}`).join('\n')}`
+    context: async ({ db, knowledge, messages }) => {
+      if (!knowledge) return undefined
+      const sections: string[] = []
+      if (recent > 0) {
+        await knowledge.init()
+        const { rows } = await db.query<{ id: string; content: string }>(
+          `select d.id, c.content from enclave.documents d join enclave.chunks c on c.document_id = d.id
+           where d.collection = $1 order by d.created_at desc limit $2`,
+          [collection, recent],
+        )
+        if (rows.length) sections.push(`Known about the user:\n${rows.map((r) => `- (${r.id}) ${r.content}`).join('\n')}`)
+      }
+      // Small models often say "I'll remember that" without calling the tool.
+      // A request in the latest message gets an explicit, turn-local nudge.
+      const latest = messages.at(-1)
+      if (latest?.role === 'user') {
+        if (FORGET_REQUEST.test(latest.content)) {
+          sections.push('The latest message asks you to forget something: call forget with its id.')
+        } else if (REMEMBER_REQUEST.test(latest.content)) {
+          sections.push('The latest message asks you to remember something: call remember now (replacing any outdated fact with forget), unless it is a secret.')
+        }
+      }
+      return sections.length ? sections.join('\n\n') : undefined
     },
   })
 }
@@ -86,3 +99,7 @@ const SECRET_PATTERNS = [
 ]
 
 export const looksLikeSecret = (text: string): boolean => SECRET_PATTERNS.some((p) => p.test(text))
+
+/** "Remember that…", "please note…", "update what you remember" — not "do you remember…?" */
+const REMEMBER_REQUEST = /\b(remember|don'?t forget|keep in mind|make a note|note that|update what you (know|remember))\b(?![^.?!]*\?)/i
+const FORGET_REQUEST = /(?<!don'?t )\b(forget|delete what you (know|remember)|stop remembering)\b(?![^.?!]*\?)/i
