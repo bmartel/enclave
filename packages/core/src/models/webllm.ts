@@ -32,10 +32,11 @@ export interface WebLLMOptions {
   thinking?: ThinkingMode
   /**
    * Most reasoning tokens per step. Past it, reasoning is closed and the step
-   * is re-asked with thinking off, so a long deliberation can't stall a turn.
-   * Late in a long conversation, Qwen3 4B decodes at about 6 tokens/s. In the
-   * evals, 90% of steps used under 500 tokens, and the only runaway (1,500+
-   * tokens of reasoning) hit the 4-minute turn limit. Default 1024; 0 disables.
+   * is re-asked with thinking off, so a runaway deliberation can't stall a
+   * turn. Keep it well above normal reasoning: Qwen3 4B without thinking
+   * describes SQL instead of running it. In the evals, 17% of SQL turns used
+   * more than 1024 tokens, and a 1024 budget broke them. Only 2 of 246
+   * turns exceeded 2048. Default 2048; 0 disables.
    */
   thinkingBudget?: number
   /**
@@ -142,7 +143,7 @@ export function webllm(options: WebLLMOptions): WebLLMModel {
   const key = `${modelId}@${contextWindow}`
   const slot = slotFor(options.worker, options.appConfig)
   const thinkingMode = options.thinking ?? 'auto'
-  const budget = options.thinkingBudget ?? 1024
+  const budget = options.thinkingBudget ?? 2048
   const qwen3 = /^Qwen3/i.test(modelId)
 
   const load = async (): Promise<void> => {
