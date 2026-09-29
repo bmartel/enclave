@@ -195,7 +195,7 @@ export function knowledgeSkill(options: KnowledgeSkillOptions = {}) {
       const sections = [
         `Knowledge base: ${available.map((c) => `${c.collection} (${c.documents} documents)`).join(', ')}.`,
       ]
-      const users = messages.filter((m) => m.role === 'user')
+      const users = messages.filter((m) => m.role === 'user' && !m.synthetic)
       const latest = users.at(-1)?.content.trim()
       if (auto && latest) {
         const hits = await retrieve(knowledge, latest, users.at(-2)?.content.trim())

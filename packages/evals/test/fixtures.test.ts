@@ -33,7 +33,7 @@ describe('business database', () => {
   it('documents the revenue rule where the sql skill shows it', async () => {
     const sql = ai.skills.find((s) => s.name === 'sql')!
     const context = await sql.context!({ db: ai.db, knowledge: undefined, embedder: undefined, threadId: 't', messages: [] })
-    expect(context).toContain('-- Revenue counts only orders whose status is not cancelled.')
+    expect(context).toContain('table orders ( -- Revenue counts only orders whose status is not cancelled.')
     expect(context).toMatch(/unit_price numeric\(10,2\) not null, -- Price per unit/)
   })
 })

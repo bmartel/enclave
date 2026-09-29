@@ -240,6 +240,8 @@ For small models, put guidance in tool results, where the model is looking when 
 
 The agent loop answers a repeated identical tool call from the earlier result instead of running it again. This breaks the search loops small models fall into.
 
+Small models sometimes announce a call ("I will now call execute_sql with the corrected query") and then end the turn. The loop catches this when tools already ran in the turn: it adds one reminder, a user message marked `synthetic: true` that UIs can hide, and continues.
+
 `dateContext(today)` spells out today and the next two weeks with weekdays, for a skill's `context`. Qwen3 4B got "this Friday" wrong 2 of 3 times when it had to count days itself.
 
 ## WebLLM performance and quality

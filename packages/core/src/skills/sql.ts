@@ -143,6 +143,7 @@ async function describe(db: Db, schemas: string[], table?: string): Promise<stri
        join pg_class c on c.oid = k.conrelid
        join pg_namespace n on n.oid = c.relnamespace
      where n.nspname = any($1) and ($2::text is null or c.relname = $2)
+       and k.contype <> 'n' -- Postgres 17 NOT NULL constraints repeat the column lines
      order by k.contype, k.conname`,
     [schemas, table ?? null],
   )
@@ -168,7 +169,8 @@ async function describe(db: Db, schemas: string[], table?: string): Promise<stri
     .map(([name, lines]) => {
       const body = lines.map((l, i) => `${l.def}${i < lines.length - 1 ? ',' : ''}${l.comment ? ` -- ${l.comment}` : ''}`)
       const note = notes.get(name)
-      return `${note ? `-- ${note}\n` : ''}table ${name} (\n  ${body.join('\n  ')}\n)`
+      // The table's comment goes on its own opening line, so it can't be read as the previous table's.
+      return `table ${name} (${note ? ` -- ${note}` : ''}\n  ${body.join('\n  ')}\n)`
     })
     .join('\n')
 }

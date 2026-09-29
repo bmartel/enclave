@@ -99,6 +99,7 @@ export async function* runAgent(rt: AgentRuntime, state: RunState): AsyncGenerat
 
   const seen = new Map<string, number>()
   let lastSignature: string | undefined
+  let followedThrough = false
 
   for (let step = 1; step <= rt.maxSteps; step++) {
     if (state.signal.aborted) {
@@ -179,6 +180,15 @@ export async function* runAgent(rt: AgentRuntime, state: RunState): AsyncGenerat
     }
 
     if (!calls.length) {
+      // Small models sometimes announce a tool call ("I will now call
+      // execute_sql…") and stop. Mid-task, remind them once and continue.
+      if (!followedThrough && step < rt.maxSteps && promisesCall(text) && usedToolsThisTurn(state.history)) {
+        followedThrough = true
+        const reminder: Message = { role: 'user', content: FOLLOW_THROUGH, synthetic: true }
+        state.history.push(reminder)
+        yield { type: 'message', message: reminder }
+        continue
+      }
       yield { type: 'finish', reason, steps: step, usage }
       return
     }
@@ -200,6 +210,24 @@ export async function* runAgent(rt: AgentRuntime, state: RunState): AsyncGenerat
   }
 
   yield { type: 'finish', reason: 'max-steps', steps: rt.maxSteps, usage }
+}
+
+const FOLLOW_THROUGH = 'You said you would call a tool but did not call it. Call it now, or answer me if no call is needed.'
+
+/** "I will now call execute_sql", "Let me run the corrected query" — not "let me know". */
+const PROMISED_CALL =
+  /\b(I will|I'll|I am going to|I'm going to|let me|let's)\s+(now\s+)?(call|run|execute|invoke|retry|re-?run|try again|use the|query|correct (it|the|this|my))\b/i
+
+const promisesCall = (text: string) => PROMISED_CALL.test(text)
+
+/** True when a tool ran since the user's last real message. */
+function usedToolsThisTurn(history: Message[]): boolean {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const m = history[i]!
+    if (m.role === 'tool') return true
+    if (m.role === 'user' && !m.synthetic) return false
+  }
+  return false
 }
 
 function* repeatedCall(call: ToolCall): Generator<AgentEvent, ToolMessage> {

@@ -202,7 +202,8 @@ describe('sql schema comments', () => {
       comment on table orders is 'Revenue excludes cancelled orders.';
       comment on column orders.status is 'pending, shipped or cancelled';`)
     const context = await sqlSkill().context!({ db, knowledge: undefined, embedder: undefined, threadId: 't', messages: [] })
-    expect(context).toContain('-- Revenue excludes cancelled orders.\ntable orders (')
+    expect(context).toContain('table orders ( -- Revenue excludes cancelled orders.')
+    expect(context).not.toContain('NOT NULL')
     expect(context).toContain('status text not null, -- pending, shipped or cancelled')
   })
 })
@@ -237,5 +238,60 @@ describe('memory boundaries', () => {
     const hits = events.find((e) => e.type === 'tool-result')!.output as { documentId: string }[]
     expect(hits.map((h) => h.documentId)).toEqual(['doc_1'])
     expect(model.requests[0]!.context).not.toContain('memory (')
+  })
+})
+
+describe('follow-through', () => {
+  const sqlLike = () =>
+    defineSkill({
+      name: 'db',
+      description: 'db',
+      tools: {
+        run: tool({
+          description: 'Run',
+          input: z.object({ sql: z.string() }),
+          execute: async ({ sql }) => {
+            if (sql.includes('order_id')) throw new Error('column "order_id" does not exist')
+            return { ok: true }
+          },
+        }),
+      },
+    })
+
+  it('reminds a model that announced a call once, then lets it act', async () => {
+    const model = mockModel([
+      { toolCalls: [{ name: 'run', input: { sql: 'update orders set status = 1 where order_id = 10' } }] },
+      'The column is wrong. I will now call run with the corrected query.',
+      { toolCalls: [{ name: 'run', input: { sql: 'update orders set status = 1 where id = 10' } }] },
+      'Done: order 10 is shipped.',
+    ])
+    const ai = await createEnclave({ db, model, skills: [sqlLike()] })
+    const events = await collect(ai.thread('t').send('ship order 10'))
+    expect(events.filter((e) => e.type === 'tool-result').map((e) => e.isError)).toEqual([true, false])
+    const history = await ai.thread('t').messages()
+    expect(history.filter((m) => m.role === 'user' && m.synthetic)).toHaveLength(1)
+    expect(events.at(-1)).toMatchObject({ type: 'finish', reason: 'stop' })
+  })
+
+  it('does not nudge a normal answer or a turn without tool use', async () => {
+    const model = mockModel(['Let me know if you need anything else.'])
+    const ai = await createEnclave({ db, model, skills: [sqlLike()] })
+    await collect(ai.thread('t').send('hi'))
+    const model2 = mockModel(['I will now call run to check.'])
+    const ai2 = await createEnclave({ db, model: model2, skills: [sqlLike()] })
+    await collect(ai2.thread('u').send('check'))
+    expect(model.requests).toHaveLength(1)
+    expect(model2.requests).toHaveLength(1) // no tool ran this turn: nothing to follow through on
+  })
+
+  it('reminds at most once per turn', async () => {
+    const model = mockModel([
+      { toolCalls: [{ name: 'run', input: { sql: 'select 1' } }] },
+      'I will now call run again.',
+      'I will now call run again.',
+    ])
+    const ai = await createEnclave({ db, model, skills: [sqlLike()] })
+    await collect(ai.thread('t').send('go'))
+    expect(model.requests).toHaveLength(3)
   })
 })

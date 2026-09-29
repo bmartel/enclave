@@ -24,6 +24,8 @@ export interface ToolCall {
 export interface UserMessage {
   role: 'user'
   content: string
+  /** Added by the agent loop (e.g. a follow-through reminder), not typed by the user. UIs can hide it. */
+  synthetic?: boolean
 }
 
 export interface AssistantMessage {
