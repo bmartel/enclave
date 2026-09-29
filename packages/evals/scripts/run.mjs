@@ -46,7 +46,26 @@ mkdirSync(profile, { recursive: true })
 const context = await chromium.launchPersistentContext(profile, { executablePath: chrome, headless: true, args: ['--enable-unsafe-webgpu'] })
 let failed = false
 
+// A run that shows no progress for this long is restarted (each turn is
+// capped at 4 minutes, and the longest case has 4 turns: 30 minutes of silence means something is stuck).
+const STALL_MS = Number(process.env.EVAL_STALL_MIN ?? 30) * 60_000
+const ATTEMPTS = 3
+
 for (const qs of configs) {
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+    const outcome = await runConfig(qs)
+    if (outcome === 'done') break
+    if (outcome === 'stalled' && attempt < ATTEMPTS) {
+      console.error(`  ↻ restarting ${qs || '(defaults)'} (attempt ${attempt + 1} of ${ATTEMPTS})`)
+      continue
+    }
+    failed = true
+    break
+  }
+}
+
+/** Run one config in a fresh page: 'done', 'stalled' or 'failed'. */
+async function runConfig(qs) {
   const page = await context.newPage()
   let printed = 0
   page.on('console', (m) => { if (m.type() === 'error') console.error('  [page]', m.text().slice(0, 200)) })
@@ -59,13 +78,17 @@ for (const qs of configs) {
   const started = Date.now()
   await page.goto(`http://127.0.0.1:${port}/?${qs}`)
   const progressFile = join(root, 'reports', 'progress.json')
-  // Stream progress lines as they appear.
+  let lastSignature = ''
+  let lastChange = Date.now()
+  let onStall
+  const stalled = new Promise((resolve) => (onStall = resolve))
+  // Stream progress lines as they appear, and watch for stalls.
   const timer = setInterval(async () => {
-    const text = await page.textContent('#status').catch(() => '')
+    const text = await page.textContent('#status', { timeout: 10_000 }).catch(() => '')
     // Print every completed run once (failures include the model's answer).
     const lines = (text ?? '').split('\n').filter((l) => /^[✓✗]/.test(l))
     for (const line of lines.slice(printed)) console.log(`  ${line}`)
-    printed = lines.length
+    printed = Math.max(printed, lines.length)
     // Live progress for `pnpm --filter @enclave/evals status`.
     const plan = await page.evaluate(() => globalThis.__evalPlan ?? null).catch(() => null)
     const phase = (text ?? '').split('\n')[0] ?? ''
@@ -73,21 +96,35 @@ for (const qs of configs) {
       progressFile,
       JSON.stringify({ config: qs || '(defaults)', configIndex: configs.indexOf(qs) + 1, configCount: configs.length, startedAt: new Date(started).toISOString(), updatedAt: new Date().toISOString(), plan, phase: plan ? 'running' : phase, completed: lines }, null, 2),
     )
+    // Any streamed token, phase change or finished run counts as progress.
+    const signature = `${text?.length ?? 0}:${phase}`
+    if (signature !== lastSignature) {
+      lastSignature = signature
+      lastChange = Date.now()
+    } else if (Date.now() - lastChange > STALL_MS) {
+      onStall(`no progress for ${Math.round(STALL_MS / 60_000)} min (at: ${phase || 'start'})`)
+    }
   }, 5000)
   try {
-    await page.waitForFunction(() => globalThis.__evalReport || globalThis.__evalError, null, { timeout: 6 * 3600_000, polling: 2000 })
+    const finished = page.waitForFunction(() => globalThis.__evalReport || globalThis.__evalError, null, { timeout: 0, polling: 2000 }).then(() => null)
+    const stall = await Promise.race([finished, stalled])
+    if (stall) {
+      console.error(`\n✗ ${qs || '(defaults)'}: ${stall}`)
+      return 'stalled'
+    }
     const error = await page.evaluate(() => globalThis.__evalError)
     if (error) throw new Error(error)
     const report = await page.evaluate(() => globalThis.__evalReport)
     const file = join(root, 'reports', `${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}-${report.label.replace(/[^\w.=-]+/g, '_')}.json`)
     writeFileSync(file, JSON.stringify({ ...report, commit, wallClockSec: Math.round((Date.now() - started) / 1000) }, null, 2))
     console.log(`\n${formatReport(report)}\n  → ${file}`)
+    return 'done'
   } catch (error) {
-    failed = true
     console.error(`\n✗ ${qs || '(defaults)'}: ${error instanceof Error ? error.message : String(error)}`)
+    return 'failed'
   } finally {
     clearInterval(timer)
-    await page.close()
+    await page.close().catch(() => {})
   }
 }
 await context.close()
