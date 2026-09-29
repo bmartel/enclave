@@ -206,3 +206,36 @@ describe('sql schema comments', () => {
     expect(context).toContain('status text not null, -- pending, shipped or cancelled')
   })
 })
+
+describe('memory boundaries', () => {
+  it('replaces an outdated memory in the same call, and never deletes documents', async () => {
+    const model = mockModel([
+      { toolCalls: [{ name: 'remember', input: { fact: 'Favorite scanner is the X100.' } }] },
+      'Saved.',
+    ])
+    const ai = await createEnclave({ db, model, embedder: hashEmbedder(32), skills: [memorySkill(), knowledgeSkill()] })
+    await ai.knowledge!.ingest({ id: 'handbook-doc', content: 'Guest wifi password is maple-harbor-42.', collection: 'handbook' })
+    await collect(ai.thread('t').send('remember my favorite scanner is the X100'))
+    const { rows } = await db.query<{ id: string }>(`select id from enclave.documents where collection = 'memory'`)
+    const old = rows[0]!.id
+
+    const tools = ai.skills.find((s) => s.name === 'memory')!.tools!
+    const ctx = { db, knowledge: ai.knowledge } as never
+    expect(await tools.remember!.execute({ fact: 'Favorite scanner is the X300.', replaces: old }, ctx)).toMatchObject({ replaced: true })
+    expect(await tools.forget!.execute({ id: 'handbook-doc' }, ctx)).toEqual({ deleted: false })
+    const left = await db.query<{ id: string; collection: string }>(`select id, collection from enclave.documents order by collection`)
+    expect(left.rows.map((r) => r.collection)).toEqual(['handbook', 'memory'])
+    expect(left.rows.some((r) => r.id === old)).toBe(false)
+  })
+
+  it('knowledge search never returns memories as documents', async () => {
+    const model = mockModel([{ toolCalls: [{ name: 'search_knowledge', input: { query: 'favorite scanner' } }] }, 'ok'])
+    const ai = await createEnclave({ db, model, embedder: hashEmbedder(32), skills: [memorySkill(), knowledgeSkill()] })
+    await ai.knowledge!.ingest({ id: 'mem_1', content: 'Favorite scanner is the X300.', collection: 'memory' })
+    await ai.knowledge!.ingest({ id: 'doc_1', content: 'The X300 scanner costs 899 dollars.', collection: 'handbook' })
+    const events = await collect(ai.thread('t').send('favorite scanner'))
+    const hits = events.find((e) => e.type === 'tool-result')!.output as { documentId: string }[]
+    expect(hits.map((h) => h.documentId)).toEqual(['doc_1'])
+    expect(model.requests[0]!.context).not.toContain('memory (')
+  })
+})

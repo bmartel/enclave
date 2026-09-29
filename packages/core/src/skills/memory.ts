@@ -20,6 +20,14 @@ export function memorySkill(options: MemorySkillOptions = {}) {
   const collection = options.collection ?? 'memory'
   const recent = options.recent ?? 10
 
+  /** Delete a memory by id; never a document from another collection. */
+  const removeMemory = async (ctx: Pick<ToolContext, 'db' | 'knowledge'>, id: string) => {
+    const knowledge = requireKnowledge(ctx)
+    await knowledge.init()
+    const { rows } = await ctx.db.query(`select 1 from enclave.documents where id = $1 and collection = $2`, [id, collection])
+    return rows.length ? knowledge.remove(id) : false
+  }
+
   return defineSkill({
     name: 'memory',
     description: 'Remember durable facts and preferences about the user across conversations.',
@@ -29,9 +37,12 @@ export function memorySkill(options: MemorySkillOptions = {}) {
 - Never store secrets (passwords, keys, card numbers) or transient details. Tell the user you won't store secrets.`,
     tools: {
       remember: tool({
-        description: 'Store one durable fact.',
-        input: z.object({ fact: z.string().min(3).max(1000) }),
-        execute: async ({ fact }, ctx) => {
+        description: 'Store one durable fact. When it updates a fact you already know, pass that memory id as replaces.',
+        input: z.object({
+          fact: z.string().min(3).max(1000),
+          replaces: z.string().optional().describe('Id of an outdated memory this fact replaces, e.g. mem_abc.'),
+        }),
+        execute: async ({ fact, replaces }, ctx) => {
           if (looksLikeSecret(fact)) {
             throw new Error('Not saved: this looks like a password, key or other secret, and secrets are never stored in memory. Tell the user.')
           }
@@ -42,7 +53,9 @@ export function memorySkill(options: MemorySkillOptions = {}) {
             collection,
             metadata: { threadId: ctx.threadId ?? null, createdAt: new Date().toISOString() },
           })
-          return { id, saved: true }
+          // Updating in the same call: small models rarely follow up with forget.
+          const replaced = replaces ? await removeMemory(ctx, replaces) : false
+          return { id, saved: true, ...(replaces ? { replaced } : {}) }
         },
       }),
       recall: tool({
@@ -56,7 +69,7 @@ export function memorySkill(options: MemorySkillOptions = {}) {
       forget: tool({
         description: 'Delete a stored memory by id.',
         input: z.object({ id: z.string() }),
-        execute: async ({ id }, ctx) => ({ deleted: await requireKnowledge(ctx).remove(id) }),
+        execute: async ({ id }, ctx) => ({ deleted: await removeMemory(ctx, id) }),
       }),
     },
     context: async ({ db, knowledge, messages }) => {
@@ -78,7 +91,7 @@ export function memorySkill(options: MemorySkillOptions = {}) {
         if (FORGET_REQUEST.test(latest.content)) {
           sections.push('The latest message asks you to forget something: call forget with its id.')
         } else if (REMEMBER_REQUEST.test(latest.content)) {
-          sections.push('The latest message asks you to remember something: call remember now (replacing any outdated fact with forget), unless it is a secret.')
+          sections.push('The latest message asks you to remember something: call remember now (if it updates a fact listed above, pass that id as replaces), unless it is a secret.')
         }
       }
       return sections.length ? sections.join('\n\n') : undefined

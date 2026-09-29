@@ -52,7 +52,8 @@ Reports give pass rates with 95% Wilson intervals, per-tag breakdowns, and consi
 | Report | Runs passed | Cases passing all repeats |
 |---|---|---|
 | `default` (baseline) | 75% [69–81%] | 72% |
-| `fixes` | **86% [80–90%]** | **82%** |
+| `fixes` | 86% [80–90%] | 82% |
+| `fixes-2` | **88% [83–92%]**, significant vs baseline | **82%** |
 
 The baseline's failures clustered around a few causes, each fixed in the library:
 
