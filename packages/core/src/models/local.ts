@@ -1,4 +1,4 @@
-import type { Embedder, FinishReason, Message, Model, ModelChunk, ModelRequest } from '../types.js'
+import type { Embedder, FinishReason, Message, Model, ModelChunk, ModelRequest, StepMetrics } from '../types.js'
 import { openaiCompatible } from './openai.js'
 import { localityOfUrl } from '../privacy/index.js'
 
@@ -17,10 +17,15 @@ export interface OllamaOptions {
    * need room for tools, schema and history. Default 16384.
    */
   contextWindow?: number
-  /** Reasoning for thinking-capable models (Qwen3, DeepSeek R1, gpt-oss…). Default false. */
-  think?: boolean | 'low' | 'medium' | 'high'
+  /**
+   * Reasoning for thinking-capable models (Qwen3, DeepSeek R1, gpt-oss…).
+   * `'auto'` (default) reasons on new user requests and answers directly after
+   * tool results, as with WebLLM; models without the thinking capability
+   * never get the flag. `true`/`false`/effort levels are sent as given.
+   */
+  think?: boolean | 'low' | 'medium' | 'high' | 'auto'
   temperature?: number
-  /** How long Ollama keeps the model in memory after a request, e.g. `30m`. */
+  /** How long Ollama keeps the model in memory after a request. Default `30m`. */
   keepAlive?: string
   fetch?: typeof fetch
 }
@@ -28,24 +33,49 @@ export interface OllamaOptions {
 /**
  * A model served by Ollama on this machine. Data stays on the device; the
  * browser talks to localhost. Ollama allows localhost origins by default.
+ *
+ * Prompts are laid out for Ollama's prompt cache, which is reused only while
+ * the start of the prompt is unchanged: the system prompt holds instructions
+ * only, live context rides on the newest user message, and earlier messages
+ * are replayed exactly as first sent.
  */
 export function ollama(options: OllamaOptions): Model {
   const baseURL = (options.baseURL ?? OLLAMA_URL).replace(/\/$/, '')
   const contextWindow = options.contextWindow ?? 16384
   const doFetch = options.fetch ?? fetch
+  const thinkMode = options.think ?? 'auto'
+  // User messages as first sent (with the context they carried then).
+  const sent = new WeakMap<Message, string>()
+  let capabilities: Promise<string[]> | undefined
+  const capabilitiesOf = () =>
+    (capabilities ??= doFetch(`${baseURL}/api/show`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: options.model }),
+    })
+      .then(async (r) => (r.ok ? ((await r.json()) as { capabilities?: string[] }).capabilities ?? [] : []))
+      .catch((): string[] => []))
 
   return {
     id: `ollama:${options.model}`,
     locality: localityOfUrl(baseURL),
     contextWindow,
     async *stream(request: ModelRequest): AsyncGenerator<ModelChunk> {
+      const messages = request.messages as Message[]
+      let think: boolean | string = thinkMode === 'auto' ? messages.at(-1)?.role === 'user' : thinkMode
+      if (thinkMode === 'auto' && !(await capabilitiesOf()).includes('thinking')) think = false
+      const wire = toOllamaMessages(request, sent)
+      const promptChars = JSON.stringify(wire).length
+      const started = performance.now()
+      let firstTokenMs: number | undefined
+
       const response = await doFetch(`${baseURL}/api/chat`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           model: options.model,
           stream: true,
-          messages: toOllamaMessages(request),
+          messages: wire,
           ...(request.tools.length
             ? {
                 tools: request.tools.map((t) => ({
@@ -54,8 +84,8 @@ export function ollama(options: OllamaOptions): Model {
                 })),
               }
             : {}),
-          think: options.think ?? false,
-          ...(options.keepAlive ? { keep_alive: options.keepAlive } : {}),
+          think,
+          keep_alive: options.keepAlive ?? '30m',
           options: {
             num_ctx: contextWindow,
             ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
@@ -72,6 +102,7 @@ export function ollama(options: OllamaOptions): Model {
       let calls = 0
       let reason: FinishReason = 'stop'
       let usage: { inputTokens: number; outputTokens: number } | undefined
+      let metrics: StepMetrics | undefined
       for await (const line of ndjson(response.body)) {
         const chunk = JSON.parse(line) as {
           message?: {
@@ -82,11 +113,16 @@ export function ollama(options: OllamaOptions): Model {
           done?: boolean
           done_reason?: string
           prompt_eval_count?: number
+          prompt_eval_duration?: number
           eval_count?: number
+          eval_duration?: number
           error?: string
         }
         if (chunk.error) throw new Error(`Ollama: ${chunk.error}`)
         const m = chunk.message
+        if (firstTokenMs === undefined && (m?.thinking || m?.content || m?.tool_calls?.length)) {
+          firstTokenMs = Math.round(performance.now() - started)
+        }
         if (m?.thinking) yield { type: 'reasoning', delta: m.thinking }
         if (m?.content) yield { type: 'text', delta: m.content }
         for (const tc of m?.tool_calls ?? []) {
@@ -99,20 +135,50 @@ export function ollama(options: OllamaOptions): Model {
         }
         if (chunk.done) {
           reason = chunk.done_reason === 'length' ? 'length' : calls ? 'tool-calls' : 'stop'
-          usage = { inputTokens: chunk.prompt_eval_count ?? 0, outputTokens: chunk.eval_count ?? 0 }
+          const prefilled = chunk.prompt_eval_count ?? 0
+          usage = { inputTokens: prefilled, outputTokens: chunk.eval_count ?? 0 }
+          const perSec = (count?: number, ns?: number) => (count && ns ? Math.round(count / (ns / 1e9)) : undefined)
+          const prefillRate = perSec(chunk.prompt_eval_count, chunk.prompt_eval_duration)
+          const decodeRate = perSec(chunk.eval_count, chunk.eval_duration)
+          metrics = {
+            prefillTokens: prefilled,
+            promptChars,
+            // Ollama counts only the tokens it had to evaluate; far fewer than
+            // the prompt's size means the cached prefix was reused.
+            kvCacheReused: prefilled < promptChars / CHARS_PER_TOKEN_ESTIMATE / 2,
+            ...(firstTokenMs !== undefined ? { timeToFirstTokenMs: firstTokenMs } : {}),
+            ...(prefillRate ? { prefillTokensPerSec: prefillRate } : {}),
+            ...(decodeRate ? { decodeTokensPerSec: decodeRate } : {}),
+          }
         }
       }
-      yield { type: 'finish', reason, ...(usage ? { usage } : {}) }
+      yield { type: 'finish', reason, ...(usage ? { usage } : {}), ...(metrics ? { metrics } : {}) }
     },
   }
 }
 
-function toOllamaMessages(request: ModelRequest): unknown[] {
-  const system = request.context ? `${request.system}\n\n${request.context}` : request.system
-  const out: unknown[] = [{ role: 'system', content: system }]
-  for (const m of request.messages as Message[]) {
-    if (m.role === 'user') out.push({ role: 'user', content: m.content })
-    else if (m.role === 'assistant') {
+/** Rough characters per token for JSON-wrapped English prompts. */
+const CHARS_PER_TOKEN_ESTIMATE = 4
+
+/**
+ * Context goes on the newest user message, frozen as first sent, so every step
+ * of a turn extends the same prompt and reuses the cache. Earlier turns carry
+ * no context (stale passages would pile up uncounted), so a new turn re-reads
+ * from the first user message on, like WebLLM's `current-turn` default.
+ */
+function toOllamaMessages(request: ModelRequest, sent: WeakMap<Message, string>): unknown[] {
+  const messages = request.messages as Message[]
+  const lastUser = messages.findLastIndex((m) => m.role === 'user')
+  const out: unknown[] = [{ role: 'system', content: request.system }]
+  for (const [i, m] of messages.entries()) {
+    if (m.role === 'user') {
+      let content = m.content
+      if (i === lastUser) {
+        content = sent.get(m) ?? (request.context ? `<context>\n${request.context}\n</context>\n\n${m.content}` : m.content)
+        sent.set(m, content)
+      }
+      out.push({ role: 'user', content })
+    } else if (m.role === 'assistant') {
       out.push({
         role: 'assistant',
         content: m.content,
@@ -123,6 +189,12 @@ function toOllamaMessages(request: ModelRequest): unknown[] {
     } else {
       out.push({ role: 'tool', tool_name: m.name, content: m.content })
     }
+  }
+  // Context that changed after the newest user message was sent (a write
+  // changed the schema, say) goes after the latest tool result instead.
+  if (request.context && sent.get(messages[lastUser]!) !== undefined && !sent.get(messages[lastUser]!)!.includes(request.context)) {
+    const last = out.at(-1) as { role: string; content: string }
+    if (last.role === 'tool') last.content = `${last.content}\n\n<context>\n${request.context}\n</context>`
   }
   return out
 }

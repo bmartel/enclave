@@ -1,4 +1,5 @@
 import { formatReport, runEval } from '@enclave/core/eval'
+import { ollama } from '@enclave/core/models/local'
 import { createWebEnclave, type ThinkingMode } from '@enclave/core/web'
 import { ALL_CASES } from '../../src/suites/index.js'
 import { prepareWorld, suiteSkills } from '../../src/world.js'
@@ -19,7 +20,12 @@ const config = {
   repeats: Number(params.get('repeats') ?? 3),
   tags: params.get('tags')?.split(',').filter(Boolean),
   only: params.get('only'),
+  /** Ollama context window (`num_ctx`), for `model=ollama:<tag>`. */
+  ctx: Number(params.get('ctx') ?? 32768),
 }
+// `model=ollama:qwen3.8:27b-q4_K_M` runs the suite on a local Ollama model
+// instead of WebLLM; everything else (world, graders, statistics) is shared.
+const ollamaTag = config.model.startsWith('ollama:') ? config.model.slice('ollama:'.length) : undefined
 const label = params.get('label') ?? `${config.model} thinking=${config.thinking} history=${config.reasoningHistory} embedding=${config.embedding} reranker=${config.reranker}${config.searchMode ? ` search=${config.searchMode}` : ''}`
 
 try {
@@ -30,7 +36,7 @@ try {
       llm: new Worker(new URL('./llm.worker.ts', import.meta.url), { type: 'module' }),
     },
     dataDir: 'memory://',
-    llm: config.model,
+    llm: ollamaTag ? ollama({ model: ollamaTag, contextWindow: config.ctx, think: config.thinking }) : config.model,
     thinking: config.thinking,
     embedding: config.embedding,
     reranker: config.reranker === 'none' ? false : config.reranker,

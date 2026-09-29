@@ -40,7 +40,57 @@ describe('ollama', () => {
     expect(body.messages.at(-1)).toEqual({ role: 'tool', tool_name: 'execute_sql', content: '[]' })
     expect(body.messages[2].tool_calls[0].function).toEqual({ name: 'execute_sql', arguments: { sql: 'x' } })
     expect(chunks.map((c) => c.type)).toEqual(['reasoning', 'text', 'tool-call', 'finish'])
-    expect(chunks.at(-1)).toEqual({ type: 'finish', reason: 'tool-calls', usage: { inputTokens: 50, outputTokens: 9 } })
+    expect(chunks.at(-1)).toMatchObject({ type: 'finish', reason: 'tool-calls', usage: { inputTokens: 50, outputTokens: 9 } })
+  })
+
+  const recorder = (capabilities: string[], done: Record<string, unknown> = {}) => {
+    const bodies: any[] = []
+    const fetch = async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url).endsWith('/api/show')) return Response.json({ capabilities })
+      bodies.push(JSON.parse(String(init!.body)))
+      return ndjson([{ message: { content: 'ok' } }, { done: true, done_reason: 'stop', eval_count: 5, prompt_eval_count: 40, ...done }])
+    }
+    return { bodies, fetch }
+  }
+
+  it('keeps context off the system prompt and frozen for the turn, so steps share a cache prefix', async () => {
+    const { bodies, fetch } = recorder(['completion', 'tools'])
+    const model = ollama({ model: 'm', fetch })
+    const user = { role: 'user' as const, content: 'how many orders?' }
+    const call = { role: 'assistant' as const, content: '', toolCalls: [{ id: 'a', name: 'q', input: {} }] }
+    const tool = { role: 'tool' as const, toolCallId: 'a', name: 'q', content: '[42]' }
+    await collect(model.stream({ system: 'S', context: 'schema v1', tools: [], messages: [user] }))
+    await collect(model.stream({ system: 'S', context: 'schema v1', tools: [], messages: [user, call, tool] }))
+    expect(bodies[0].messages[0]).toEqual({ role: 'system', content: 'S' })
+    expect(bodies[0].messages[1].content).toBe('<context>\nschema v1\n</context>\n\nhow many orders?')
+    // Step 2's prompt starts with step 1's prompt, byte for byte.
+    const first = JSON.stringify(bodies[0].messages)
+    expect(JSON.stringify(bodies[1].messages.slice(0, 2))).toBe(first)
+
+    // A new turn: the earlier turn's message is sent without its old context.
+    const next = { role: 'user' as const, content: 'and last month?' }
+    await collect(model.stream({ system: 'S', context: 'schema v2', tools: [], messages: [user, call, tool, { role: 'assistant', content: '42' }, next] }))
+    expect(bodies[2].messages[1].content).toBe('how many orders?')
+    expect(bodies[2].messages.at(-1).content).toContain('schema v2')
+  })
+
+  it("thinks on new requests only, and only when the model can ('auto')", async () => {
+    const thinking = recorder(['completion', 'tools', 'thinking'])
+    const model = ollama({ model: 'qwen', fetch: thinking.fetch })
+    const user = { role: 'user' as const, content: 'q' }
+    await collect(model.stream({ system: '', tools: [], messages: [user] }))
+    await collect(model.stream({ system: '', tools: [], messages: [user, { role: 'assistant', content: '', toolCalls: [{ id: 'a', name: 't', input: {} }] }, { role: 'tool', toolCallId: 'a', name: 't', content: 'r' }] }))
+    expect(thinking.bodies.map((b) => b.think)).toEqual([true, false])
+
+    const plain = recorder(['completion', 'tools'])
+    await collect(ollama({ model: 'llama', fetch: plain.fetch }).stream({ system: '', tools: [], messages: [user] }))
+    expect(plain.bodies[0].think).toBe(false)
+  })
+
+  it('reports prefill/decode speed and cache reuse', async () => {
+    const { fetch } = recorder([], { prompt_eval_count: 12, prompt_eval_duration: 60e6, eval_count: 30, eval_duration: 1e9 })
+    const chunks = await collect(ollama({ model: 'm', fetch }).stream({ system: 'x'.repeat(4000), tools: [], messages: [{ role: 'user', content: 'q' }] }))
+    expect(chunks.at(-1)).toMatchObject({ metrics: { prefillTokens: 12, prefillTokensPerSec: 200, decodeTokensPerSec: 30, kvCacheReused: true } })
   })
 
   it('explains unreachable servers', async () => {
