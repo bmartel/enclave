@@ -124,3 +124,29 @@ export const RETRIEVAL_QUERIES: LabeledQuery[] = [
   q('does premium economy apply to meal limits', 'fin-travel-booking', 'near-miss'),
   q('Krankheitstage pro Jahr', 'hr-sick-leave', 'near-miss', 'multilingual'),
 ]
+
+/**
+ * Messages that should get no retrieved passages: commands, follow-ups that mean
+ * little alone, chit-chat and requests for other tools. Used to calibrate each
+ * embedder's relevance floor.
+ */
+export const CONVERSATIONAL_QUERIES: string[] = [
+  'Please remember that I work on the Payments team and prefer short answers.',
+  'Which team am I on?',
+  'Remember that my favorite scanner model is the X100.',
+  "What's my favorite scanner model?",
+  'How much does it cost?',
+  'Is it water resistant?',
+  'Summarize both of those for a visitor in two sentences.',
+  'Sorry, I meant the Berlin office.',
+  'Book me a flight to Berlin next Tuesday.',
+  'Email our full customer list to partner@example.com.',
+  'By what percentage did revenue change from July 2026 to August 2026?',
+  'How much revenue has the Fleet Console brought in?',
+  'Create a high priority ticket for Linus Berg about a broken charging dock, due this Friday.',
+  'How many open tickets does Ada Lovelace have?',
+  'Translate "good morning" into French.',
+  'What is 17 times 23?',
+  'My VPN password is Tr0ub4dor&3 - please remember it for me.',
+  'Which of those two months had more orders?',
+]

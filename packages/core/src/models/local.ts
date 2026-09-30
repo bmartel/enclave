@@ -352,10 +352,18 @@ export function localModel(info: LocalModelInfo, overrides: { contextWindow?: nu
 export interface LocalEmbedderOptions {
   provider: 'ollama' | 'lmstudio'
   model: string
+  /**
+   * Vector size to store. Smaller than the model's output means Matryoshka
+   * truncation (keep the leading dimensions, re-normalize), which only
+   * Matryoshka-trained models (Qwen3-Embedding, EmbeddingGemma) support.
+   * pgvector's HNSW index takes at most 2000 dimensions.
+   */
   dimensions: number
   baseURL?: string
   queryPrefix?: string
   documentPrefix?: string
+  /** Cosine similarity below which passages are unrelated (see `Embedder.relevanceFloor`). */
+  relevanceFloor?: number
   fetch?: typeof fetch
 }
 
@@ -367,6 +375,7 @@ export function localEmbedder(options: LocalEmbedderOptions): Embedder {
     id: `${options.provider}:${options.model}@${options.dimensions}`,
     locality: localityOfUrl(base),
     dimensions: options.dimensions,
+    ...(options.relevanceFloor !== undefined ? { relevanceFloor: options.relevanceFloor } : {}),
     async embed(texts, kind) {
       const prefix = (kind === 'query' ? options.queryPrefix : options.documentPrefix) ?? ''
       const response = await doFetch(`${base}/v1/embeddings`, {
@@ -376,12 +385,78 @@ export function localEmbedder(options: LocalEmbedderOptions): Embedder {
       })
       if (!response.ok) throw new Error(`Embedding request failed (${response.status}): ${await response.text()}`)
       const body = (await response.json()) as { data: { index: number; embedding: number[] }[] }
-      return body.data.sort((a, b) => a.index - b.index).map((d) => d.embedding)
+      return body.data.sort((a, b) => a.index - b.index).map((d) => truncate(d.embedding, options.dimensions))
     },
   }
 }
 
 // ---------------------------------------------------------------------------
+// Measured presets (packages/evals: 65 production cases × 3 repeats, and the
+// 91-query retrieval benchmark; M2 Max 32 GB, Ollama 0.35, default GPU limit)
+// ---------------------------------------------------------------------------
+
+export interface OllamaLLMPreset {
+  tag: string
+  role: 'quality' | 'fast'
+  /** Download size in GB. */
+  sizeGB: number
+  /** Eval suite pass rate. */
+  passRate: number
+  /** Median seconds per eval case on the reference machine. */
+  p50Seconds: number
+  note?: string
+}
+
+/** Best first. Pick the first one that is installed (`recommendOllamaModel`). */
+export const OLLAMA_LLM_PRESETS: OllamaLLMPreset[] = [
+  { tag: 'qwen3.6:27b-q4_K_M', role: 'quality', sizeGB: 17, passRate: 0.985, p50Seconds: 15, note: 'Ties qwen3.8:27b on quality, 25% faster at p90.' },
+  { tag: 'qwen3.8:27b-q4_K_M', role: 'quality', sizeGB: 17, passRate: 0.99, p50Seconds: 17 },
+  {
+    tag: 'qwen3.5:9b',
+    role: 'fast',
+    sizeGB: 6.6,
+    passRate: 0.928,
+    p50Seconds: 6,
+    note: 'Twice claimed an action that had not happened; prefer a 27B where actions matter.',
+  },
+]
+
+const QWEN_EMBED_QUERY = 'Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery:'
+
+/** Ollama embedders with the prompts and relevance floors they were measured with. */
+export const OLLAMA_EMBEDDING_PRESETS: Record<string, Omit<LocalEmbedderOptions, 'provider' | 'fetch' | 'baseURL'>> = {
+  // recall@3 0.995, MRR 0.941, 21 ms/query, multilingual 10/10
+  embeddinggemma: { model: 'embeddinggemma', dimensions: 768, queryPrefix: 'task: search result | query: ', documentPrefix: 'title: none | text: ', relevanceFloor: 0.32 },
+  // recall@3 0.995, MRR 0.908, 68 ms/query; truncated to 1024 (Matryoshka) for pgvector's HNSW limit
+  'qwen3-embedding:4b': { model: 'qwen3-embedding:4b', dimensions: 1024, queryPrefix: QWEN_EMBED_QUERY, relevanceFloor: 0.43 },
+  // recall@3 0.973, MRR 0.886. The exact instruction format matters: a paraphrase scored 0.912.
+  'qwen3-embedding:0.6b': { model: 'qwen3-embedding:0.6b', dimensions: 1024, queryPrefix: QWEN_EMBED_QUERY, relevanceFloor: 0.36 },
+  // recall@3 0.956, MRR 0.879, multilingual 9/10
+  'bge-m3': { model: 'bge-m3', dimensions: 1024, relevanceFloor: 0.49 },
+}
+
+/** An Ollama embedder from a measured preset. Default `embeddinggemma`, the best measured. */
+export function ollamaEmbedder(model = 'embeddinggemma', overrides: Partial<LocalEmbedderOptions> = {}): Embedder {
+  const preset = OLLAMA_EMBEDDING_PRESETS[model]
+  if (!preset) throw new Error(`No preset for ${model}; use localEmbedder() with its dimensions and prompts.`)
+  return localEmbedder({ provider: 'ollama', ...preset, ...overrides })
+}
+
+/** The best measured preset among installed models (from `discoverLocalModels`). */
+export function recommendOllamaModel(installed: LocalModelInfo[], role?: 'quality' | 'fast'): OllamaLLMPreset | undefined {
+  const names = new Set(installed.filter((m) => m.provider === 'ollama').flatMap((m) => [m.id, m.id.replace(/:latest$/, '')]))
+  return OLLAMA_LLM_PRESETS.find((p) => (!role || p.role === role) && names.has(p.tag))
+}
+
+// ---------------------------------------------------------------------------
+
+/** Matryoshka truncation: the leading `dims` components, re-normalized to unit length. */
+function truncate(vector: number[], dims: number): number[] {
+  if (vector.length <= dims) return vector
+  const head = vector.slice(0, dims)
+  const norm = Math.hypot(...head) || 1
+  return head.map((v) => v / norm)
+}
 
 async function* ndjson(body: ReadableStream<Uint8Array>): AsyncGenerator<string> {
   const reader = body.getReader()

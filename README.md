@@ -155,18 +155,44 @@ Status is computed against the same hosting configuration the app downloads with
 For machines that already run a model server:
 
 ```ts
-import { discoverLocalModels, localModel, ollama, lmstudio, localEmbedder } from '@enclave/core/models/local'
+import { discoverLocalModels, recommendOllamaModel, ollama, ollamaEmbedder, lmstudio } from '@enclave/core/models/local'
 
-const found = await discoverLocalModels()           // Ollama (:11434) + LM Studio (:1234); unreachable servers are skipped
-await ai.useModel(localModel(found[0]!))
-await ai.useModel(ollama({ model: 'qwen3:8b', contextWindow: 16384, think: true }))
+const found = await discoverLocalModels()                  // Ollama (:11434) + LM Studio (:1234); unreachable servers are skipped
+const pick = recommendOllamaModel(found)                   // best measured preset that is installed
+await ai.useModel(ollama({ model: pick?.tag ?? 'qwen3.6:27b-q4_K_M', contextWindow: 32768 }))
+const embedder = ollamaEmbedder()                          // embeddinggemma, with its measured prompts and relevance floor
 await ai.useModel(lmstudio({ model: 'qwen/qwen3-4b' }))
 ```
 
-- **Ollama** uses the native `/api/chat` endpoint. That endpoint supports `num_ctx`, thinking and tools; the OpenAI-compatible one ignores `num_ctx`, and Ollama's default window is too small for agents.
+Measured with the production evals, on an M2 Max with 32 GB, Ollama 0.35 and the default GPU memory limit:
+
+| Model | Eval pass rate | Median per case | Size |
+|---|---|---|---|
+| `qwen3.6:27b-q4_K_M` (quality default) | 98.5% | 15 s | 17 GB |
+| `qwen3.8:27b-q4_K_M` | 99.0% | 17 s | 17 GB |
+| `qwen3.5:9b` (fast) | 92.8% | 6 s | 6.6 GB |
+| In-browser WebLLM Qwen3 4B, for comparison | 91.8% | 38 s | 2.3 GB |
+
+- The 27B models tie on quality. `qwen3.6` is 25% faster at p90.
+- `qwen3.5:9b` twice claimed an action that had not happened. Use a 27B where actions matter.
+
+Embeddings on the 91-query retrieval benchmark:
+
+| Embedder | Recall@3 | MRR | Per query |
+|---|---|---|---|
+| `embeddinggemma` (default) | 0.995 | 0.941 | 21 ms |
+| `qwen3-embedding:4b` (1024-d) | 0.995 | 0.908 | 68 ms |
+| `qwen3-embedding:0.6b` | 0.973 | 0.886 | 20 ms |
+| `bge-m3` | 0.956 | 0.879 | 21 ms |
+
+Qwen3-Embedding needs its exact instruction format. A paraphrased instruction dropped the 0.6b model to 0.912.
+
+- **Ollama** uses the native `/api/chat` endpoint, which supports `num_ctx`, thinking and tools. The OpenAI-compatible endpoint ignores `num_ctx`, and Ollama's default window is too small for agents.
+  - Prompts are laid out for Ollama's prompt cache: live context rides on the newest message. A follow-up step reads its prompt in about 0.3–0.6 s, against 2–8 s cold.
+  - `think: 'auto'` (the default) reasons on new requests, answers directly after tool results, and applies only to models that support thinking.
 - **LM Studio** uses its OpenAI-compatible server. Enable CORS in its server settings.
 - **Discovery** reports tool support, context length and loaded state.
-- **`localEmbedder`** computes embeddings on either server.
+- **`localEmbedder`** computes embeddings on either server. Setting `dimensions` below the model's output truncates Matryoshka models; pgvector's HNSW index takes at most 2000 dimensions.
 
 Any OpenAI-compatible endpoint also works via `openaiCompatible()`, and Claude via `anthropic()`.
 

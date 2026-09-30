@@ -171,3 +171,30 @@ describe('discoverLocalModels', () => {
     expect(await e.embed(['hello'], 'query')).toEqual([[1, 0]])
   })
 })
+
+describe('measured Ollama presets', () => {
+  it('builds embedders with their measured prompts, dimensions and floors', async () => {
+    let body: any
+    const { ollamaEmbedder } = await import('../src/models/local.js')
+    const e = ollamaEmbedder('qwen3-embedding:4b', {
+      fetch: async (_u, init) => {
+        body = JSON.parse(String(init!.body))
+        return Response.json({ data: [{ index: 0, embedding: Array.from({ length: 2560 }, (_, i) => (i < 1024 ? 1 : 5)) }] })
+      },
+    })
+    const [v] = await e.embed(['vacation days'], 'query')
+    expect(body.input[0]).toBe('Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery:vacation days')
+    expect(v).toHaveLength(1024) // Matryoshka-truncated and re-normalized
+    expect(Math.hypot(...v!)).toBeCloseTo(1, 6)
+    expect(e.relevanceFloor).toBe(0.43)
+    expect(() => ollamaEmbedder('unknown-model')).toThrow(/No preset/)
+  })
+
+  it('recommends the best installed model', async () => {
+    const { recommendOllamaModel } = await import('../src/models/local.js')
+    const m = (id: string) => ({ provider: 'ollama' as const, id, label: id, kind: 'llm' as const })
+    expect(recommendOllamaModel([m('qwen3.5:9b'), m('qwen3.8:27b-q4_K_M')])?.tag).toBe('qwen3.8:27b-q4_K_M')
+    expect(recommendOllamaModel([m('qwen3.5:9b'), m('qwen3.8:27b-q4_K_M')], 'fast')?.tag).toBe('qwen3.5:9b')
+    expect(recommendOllamaModel([m('llama3:8b')])).toBeUndefined()
+  })
+})
