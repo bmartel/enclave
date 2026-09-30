@@ -338,7 +338,7 @@ export async function discoverLocalModels(options: DiscoverOptions = {}): Promis
 }
 
 /** Build a `Model` for a discovered entry. */
-export function localModel(info: LocalModelInfo, overrides: { contextWindow?: number; think?: boolean } = {}): Model {
+export function localModel(info: LocalModelInfo, overrides: { contextWindow?: number; think?: OllamaOptions['think'] } = {}): Model {
   const contextWindow = overrides.contextWindow ?? Math.min(info.contextLength ?? 16384, 32768)
   return info.provider === 'ollama'
     ? ollama({ model: info.id, contextWindow, ...(overrides.think !== undefined ? { think: overrides.think } : {}) })

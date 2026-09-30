@@ -1,6 +1,16 @@
 import type { Model, Thread, ToolCall } from '@enclave/core'
 import { chromeAI, chromeAIAvailable } from '@enclave/core/models/chrome'
-import { discoverLocalModels, localModel, lmstudio, ollama, type LocalModelInfo } from '@enclave/core/models/local'
+import {
+  discoverLocalModels,
+  localModel,
+  lmstudio,
+  ollama,
+  ollamaEmbedder,
+  recommendOllamaModel,
+  OLLAMA_EMBEDDING_PRESETS,
+  OLLAMA_LLM_PRESETS,
+  type LocalModelInfo,
+} from '@enclave/core/models/local'
 import { knowledgeSkill, memorySkill, sqlSkill } from '@enclave/core/skills'
 import {
   BROWSER_LLMS,
@@ -67,14 +77,19 @@ let selection = stored('model')
 const thinking = $<HTMLInputElement>('thinking')
 thinking.checked = stored('thinking', 'true') === 'true'
 
+// Measured Ollama models get the context window they were evaluated with.
+const measured = new Set(OLLAMA_LLM_PRESETS.map((p) => p.tag))
+
 function modelFromSelection(value: string, local: LocalModelInfo[] = []): Model | undefined {
   const [kind, ...rest] = value.split(':')
   const id = rest.join(':')
   if (kind === 'chrome') return chromeAI()
   if (kind === 'ollama' || kind === 'lmstudio') {
+    const think = thinking.checked ? ('auto' as const) : false
+    const contextWindow = measured.has(id) ? 32768 : undefined
     const info = local.find((m) => m.provider === kind && m.id === id)
-    if (info) return localModel(info, { think: thinking.checked })
-    return kind === 'ollama' ? ollama({ model: id, think: thinking.checked }) : lmstudio({ model: id })
+    if (info) return localModel(info, { think, ...(contextWindow ? { contextWindow } : {}) })
+    return kind === 'ollama' ? ollama({ model: id, think, ...(contextWindow ? { contextWindow } : {}) }) : lmstudio({ model: id })
   }
   return undefined
 }
@@ -82,12 +97,39 @@ function modelFromSelection(value: string, local: LocalModelInfo[] = []): Model 
 // `pnpm dev:strict`: every model file from this origin, only on-device components.
 const strict = import.meta.env.VITE_STRICT === '1'
 
+// Local servers first: a measured Ollama model beats the in-browser models by
+// a wide margin (98.5% vs 92% on the evals). A refused localhost connection
+// fails instantly, so this costs nothing when no server runs.
+let localModels: LocalModelInfo[] = strict ? [] : await discoverLocalModels({ timeoutMs: 800 }).catch(() => [])
+const bare = (id: string) => id.replace(/:latest$/, '')
+const installed = (value: string) => {
+  const [kind, ...rest] = value.split(':')
+  return localModels.some((m) => m.provider === kind && bare(m.id) === bare(rest.join(':')))
+}
+let bootNote = ''
+if (!selection) {
+  const pick = recommendOllamaModel(localModels)
+  if (pick) {
+    selection = `ollama:${pick.tag}`
+    bootNote = ` (found ${pick.tag} in Ollama)`
+  }
+} else if ((selection.startsWith('ollama:') || selection.startsWith('lmstudio:')) && !installed(selection)) {
+  // The saved local model isn't reachable (server stopped?): fall back to the browser.
+  bootNote = ` (${selection.split(':').slice(1).join(':')} is not reachable; using the in-browser model)`
+  selection = ''
+}
+
+// `ollama:<preset>` embeddings, offered when that model is installed in Ollama.
+const embeddingChoice = stored('embedding', 'auto')
+const ollamaEmbedding = embeddingChoice.startsWith('ollama:') && installed(embeddingChoice) ? embeddingChoice.slice('ollama:'.length) : undefined
+
 const ai = await createWebEnclave({
   workers,
   dataDir: 'idb://enclave-playground',
   ...(strict ? { selfHost: { baseUrl: '/models' }, privacy: { allow: 'device' as const } } : {}),
   llm: selection.startsWith('browser:') ? selection.slice(8) : (modelFromSelection(selection) ?? 'auto'),
-  embedding: stored('embedding', 'auto'),
+  embedding: ollamaEmbedding ? ollamaEmbedder(ollamaEmbedding) : embeddingChoice.startsWith('ollama:') ? 'auto' : embeddingChoice,
+  ...(ollamaEmbedding === 'embeddinggemma' ? { knowledge: { defaultMode: 'vector' as const } } : {}),
   reranker: stored('reranker', 'auto') === 'none' ? false : stored('reranker', 'auto'),
   thinking: thinking.checked,
   // Secondary skills are lazy: fewer visible tools keeps small models focused and faster.
@@ -106,14 +148,13 @@ if (!selection) {
   const rec = recommendLLM(device)
   selection = rec ? `browser:${rec.preset.id}` : ''
 }
-setStatus(`Ready. Model: ${ai.model.id}`)
+setStatus(`Ready. Model: ${ai.model.id}${bootNote}`)
 
 // ---------------------------------------------------------------------------
 // Model picker
 // ---------------------------------------------------------------------------
 
 const modelSelect = $<HTMLSelectElement>('model')
-let localModels: LocalModelInfo[] = []
 let chromeAvailable = false
 
 async function renderModelOptions() {
@@ -155,14 +196,17 @@ async function renderModelOptions() {
         'This computer · Ollama',
         localModels
           .filter((m) => m.provider === 'ollama' && m.kind === 'llm')
-          .map((m) =>
-            option(
-              `ollama:${m.id}`,
-              `${m.id}${m.parameterSize ? ` — ${m.parameterSize}` : ''}${
-                m.capabilities && !m.capabilities.includes('tools') ? ' · no tool support' : ''
-              }`,
-            ),
-          ),
+          // Measured presets first, in their ranked order.
+          .sort((a, b) => rank(a.id) - rank(b.id))
+          .map((m) => {
+            const preset = OLLAMA_LLM_PRESETS.find((p) => p.tag === m.id)
+            const flags = [
+              preset ? `★ ${(preset.passRate * 100).toFixed(1)}% on evals · ~${preset.p50Seconds}s/answer` : '',
+              m.parameterSize ?? '',
+              m.capabilities && !m.capabilities.includes('tools') ? 'no tool support' : '',
+            ].filter(Boolean)
+            return option(`ollama:${m.id}`, `${m.id}${flags.length ? ` — ${flags.join(' · ')}` : ''}`)
+          }),
       ),
       group(
         'This computer · LM Studio',
@@ -174,6 +218,11 @@ async function renderModelOptions() {
   )
   modelSelect.value = selection
   describeSelection()
+}
+
+const rank = (tag: string) => {
+  const i = OLLAMA_LLM_PRESETS.findIndex((p) => p.tag === tag)
+  return i < 0 ? OLLAMA_LLM_PRESETS.length : i
 }
 
 function describeSelection() {
@@ -196,9 +245,10 @@ function describeSelection() {
   } else {
     const [provider, ...rest] = selection.split(':')
     const m = localModels.find((x) => x.provider === provider && x.id === rest.join(':'))
+    const preset = OLLAMA_LLM_PRESETS.find((p) => p.tag === rest.join(':'))
     info.textContent = `Served by ${provider === 'ollama' ? 'Ollama' : 'LM Studio'} on this computer${
       m?.contextLength ? ` · ${m.contextLength / 1024}k max ctx` : ''
-    }${m?.quantization ? ` · ${m.quantization}` : ''}`
+    }${m?.quantization ? ` · ${m.quantization}` : ''}${preset?.note ? ` · ${preset.note}` : ''}`
     forget.hidden = true
     load.hidden = true
   }
@@ -261,6 +311,10 @@ const embeddingSelect = $<HTMLSelectElement>('embedding')
 embeddingSelect.append(
   new Option(`Auto (${'label' in ai.plan.embedding ? ai.plan.embedding.label : ai.plan.embedding.id})`, 'auto'),
   ...EMBEDDING_PRESETS.map((p) => new Option(`${p.label} · ${p.dimensions}d · ${p.downloadMB} MB`, p.id)),
+  // Ollama embedders with measured presets, when installed.
+  ...Object.keys(OLLAMA_EMBEDDING_PRESETS)
+    .filter((model) => installed(`ollama:${model}`))
+    .map((model) => new Option(`${model} (Ollama)`, `ollama:${model}`)),
 )
 embeddingSelect.value = stored('embedding', 'auto')
 embeddingSelect.onchange = () => {
@@ -509,12 +563,6 @@ $<HTMLTextAreaElement>('input').onkeydown = (e) => {
 }
 
 chromeAvailable = await chromeAIAvailable().catch(() => false)
-if (!strict) {
-  void discoverLocalModels({ timeoutMs: 800 }).then(async (found) => {
-    localModels = found
-    await renderModelOptions()
-  })
-}
 await Promise.all([renderModelOptions(), renderHistory(), refreshThreads(), refreshCollections()])
 document.body.dataset.ready = 'true'
 

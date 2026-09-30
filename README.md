@@ -400,6 +400,11 @@ pnpm --filter playground dev:strict         # self-hosted models + CSP: no third
 
 The playground shows the detected device and a model picker. The picker groups WebLLM models (with fit, cached and too-large markers), Transformers.js models, Chrome built-in AI, and discovered Ollama / LM Studio models. It also has embedding and reranker pickers, download progress, cache deletion, file ingestion, and streaming chat with inline approvals.
 
+Local servers come first:
+- **Boot:** the playground discovers Ollama and LM Studio before it starts. On a first visit it picks the best installed measured preset (for example `qwen3.6:27b`), and falls back to the recommended in-browser model.
+- **Unreachable server:** if a saved local model can't be reached, the playground uses the in-browser model and says so.
+- **Picker:** measured Ollama models are listed first, with a ★, their eval pass rate and a time per answer. Installed Ollama embedders (`embeddinggemma` and others) appear in the embedding picker.
+
 ## Verified
 
 On Chrome with WebGPU (Apple silicon):
