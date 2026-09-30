@@ -64,6 +64,8 @@ describe('memory secrets', () => {
     'api key: sk-live-abcdefghijklmnop',
     'Card 4111 1111 1111 1111',
     'PIN = 4821',
+    'Tr0ub4dor&3',
+    'Remember this for me: Tr0ub4dor&3.',
   ])('refuses %s', (text) => expect(looksLikeSecret(text)).toBe(true))
 
   it.each([
@@ -72,6 +74,10 @@ describe('memory secrets', () => {
     'Uses 1Password as their password manager.',
     'Favorite scanner model is the X300.',
     'The password policy requires 14 characters.',
+    'Prefers the X300 (IP67) over the X100.',
+    'Works from Berlin, office hours 9-17.',
+    'Email is wei.chen2@globex.example and the wiki is https://wiki.example/page-2?x=1.',
+    'Birthday is 1990-04-12.',
   ])('keeps %s', (text) => expect(looksLikeSecret(text)).toBe(false))
 
   it('the remember tool rejects secrets without storing them', async () => {

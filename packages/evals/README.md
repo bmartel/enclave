@@ -56,7 +56,8 @@ Reports give pass rates with 95% Wilson intervals, per-tag breakdowns, and consi
 | `fixes-2` | 88% [83–92%], significant vs baseline | 82% |
 | `fixes-3` | 91% [86–94%], significant vs baseline | 88% |
 | `fixes-4` | 89% [84–93%] | 86% |
-| `fixes-5` | **92% [87–95%]**, significant vs baseline | **88%** |
+| `fixes-5` | 92% [87–95%], significant vs baseline | 88% |
+| `fixes-6` (no stale context in history) | 90% [85–94%] | 82% |
 
 The baseline's failures clustered around a few causes, each fixed in the library:
 
@@ -78,6 +79,17 @@ Still failing:
 - Updating a remembered fact.
 - Keeping a fact from two turns earlier in a summary.
 - Multi-hop lookups (role → person).
+
+`fixes-6` stopped replaying each turn's context block (schema plus passages) in later turns. Overall pass rate is level with `fixes-5` (within noise). Conversations improved clearly:
+
+| | fixes-5 | fixes-6 |
+|---|---|---|
+| Later turns passed | 89% | 93% |
+| Time to first token, later turns | 14.0 s | 7.2 s |
+| Prefill tokens per later turn | 4,599 | 3,017 |
+| p90 time per case | 127 s | 95 s |
+
+"Correction mid-conversation" passed for the first time (3/3): stale passages had been pulling the final summary off the conversation.
 
 ## Local models via Ollama (M2 Max, 32 GB, default GPU memory limit)
 

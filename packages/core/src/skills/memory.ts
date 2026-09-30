@@ -111,7 +111,19 @@ const SECRET_PATTERNS = [
   /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
 ]
 
-export const looksLikeSecret = (text: string): boolean => SECRET_PATTERNS.some((p) => p.test(text))
+/**
+ * A bare password: one token of 8+ characters mixing letters, digits and
+ * symbols ("Tr0ub4dor&3"). A model stored exactly that, with no "password is"
+ * in front. URLs and email addresses are not treated as secrets.
+ */
+const PASSWORD_LIKE = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[^\w\s]).{8,}$/
+
+export const looksLikeSecret = (text: string): boolean =>
+  SECRET_PATTERNS.some((p) => p.test(text)) ||
+  text
+    .split(/\s+/)
+    .map((token) => token.replace(/^["'`(]+|["'`).,;:!?]+$/g, ''))
+    .some((token) => PASSWORD_LIKE.test(token) && !/^[a-z]+:\/\//i.test(token) && !/^[^@\s]+@[^@\s]+\.[a-z]+$/i.test(token))
 
 /** "Remember that…", "please note…", "update what you remember" — not "do you remember…?" */
 const REMEMBER_REQUEST = /\b(remember|don'?t forget|keep in mind|make a note|note that|update what you (know|remember))\b(?![^.?!]*\?)/i
