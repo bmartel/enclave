@@ -2,6 +2,7 @@ import type { FinishReason, Message, Model, ModelChunk, ModelRequest, ToolCall }
 import { fromTextModel } from './text-protocol.js'
 import { sseData } from './sse.js'
 import { localityOfUrl } from '../privacy/index.js'
+import { TurnContext } from './turn-context.js'
 
 export interface OpenAICompatibleOptions {
   /** e.g. `http://localhost:11434/v1` (Ollama), `http://localhost:1234/v1` (LM Studio), `https://api.openai.com/v1`. */
@@ -13,12 +14,21 @@ export interface OpenAICompatibleOptions {
   maxTokens?: number
   /** Merged into every request body. */
   extraBody?: Record<string, unknown>
+  /** Per-request body fields, e.g. turning reasoning off after tool results. */
+  requestBody?: (request: ModelRequest) => Record<string, unknown>
   /**
    * `native` uses the endpoint's `tools` support. `prompt` describes tools in
    * the system prompt and parses `<tool_call>` tags, for servers or models
    * without function calling. Default `native`.
    */
   toolMode?: 'native' | 'prompt'
+  /**
+   * Where live context goes. `system` (default) merges it into the system
+   * prompt. `message` puts it on the newest user message, frozen for the
+   * turn, so prefix-caching servers (LM Studio, llama.cpp, vLLM) reuse
+   * their cache across agent steps. See `TurnContext`.
+   */
+  contextPlacement?: 'system' | 'message'
   fetch?: typeof fetch
 }
 
@@ -45,12 +55,14 @@ export function openaiCompatible(options: OpenAICompatibleOptions): Model {
     })
   }
 
+  const turn = options.contextPlacement === 'message' ? new TurnContext() : undefined
   return {
     id,
     locality,
     async *stream(request: ModelRequest): AsyncGenerator<ModelChunk> {
       const body: Record<string, unknown> = {
-        messages: toOpenAIMessages(request),
+        ...options.requestBody?.(request),
+        messages: toOpenAIMessages(request, turn),
         stream_options: { include_usage: true },
       }
       if (request.tools.length) {
@@ -64,7 +76,10 @@ export function openaiCompatible(options: OpenAICompatibleOptions): Model {
       let reason: FinishReason = 'stop'
       let usage: { inputTokens: number; outputTokens: number } | undefined
 
+      const started = performance.now()
+      let firstTokenMs: number | undefined
       for await (const chunk of streamCompletions(options, body, request.signal)) {
+        if (firstTokenMs === undefined && chunk.choices?.[0]?.delta) firstTokenMs = Math.round(performance.now() - started)
         if (chunk.usage) {
           usage = { inputTokens: chunk.usage.prompt_tokens ?? 0, outputTokens: chunk.usage.completion_tokens ?? 0 }
         }
@@ -94,7 +109,12 @@ export function openaiCompatible(options: OpenAICompatibleOptions): Model {
         yield { type: 'tool-call', call }
       }
       if (pending.size && reason === 'stop') reason = 'tool-calls'
-      yield { type: 'finish', reason, ...(usage ? { usage } : {}) }
+      const decodeSec = firstTokenMs !== undefined ? (performance.now() - started - firstTokenMs) / 1000 : 0
+      const metrics = {
+        ...(firstTokenMs !== undefined ? { timeToFirstTokenMs: firstTokenMs } : {}),
+        ...(usage?.outputTokens && decodeSec > 0 ? { decodeTokensPerSec: Math.round(usage.outputTokens / decodeSec) } : {}),
+      }
+      yield { type: 'finish', reason, ...(usage ? { usage } : {}), ...(Object.keys(metrics).length ? { metrics } : {}) }
     },
   }
 }
@@ -144,11 +164,12 @@ async function* streamCompletions(
   }
 }
 
-function toOpenAIMessages(request: ModelRequest): unknown[] {
-  const system = request.context ? `${request.system}\n\n${request.context}` : request.system
-  const out: unknown[] = [{ role: 'system', content: system }]
-  for (const m of request.messages as Message[]) {
-    if (m.role === 'user') out.push({ role: 'user', content: m.content })
+function toOpenAIMessages(request: ModelRequest, turn?: TurnContext): unknown[] {
+  const layout = turn?.layout(request)
+  const system = request.context && !layout ? `${request.system}\n\n${request.context}` : request.system
+  const out: { role: string; content: string | null; [key: string]: unknown }[] = [{ role: 'system', content: system }]
+  for (const [i, m] of (request.messages as Message[]).entries()) {
+    if (m.role === 'user') out.push({ role: 'user', content: layout ? layout.userContent(m, i) : m.content })
     else if (m.role === 'assistant') {
       out.push({
         role: 'assistant',
@@ -167,6 +188,7 @@ function toOpenAIMessages(request: ModelRequest): unknown[] {
       out.push({ role: 'tool', tool_call_id: m.toolCallId, content: m.content })
     }
   }
+  if (layout?.changedContext) out.at(-1)!.content += layout.changedContext
   return out
 }
 

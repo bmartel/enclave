@@ -1,5 +1,6 @@
 import type { Embedder, FinishReason, Message, Model, ModelChunk, ModelRequest, StepMetrics } from '../types.js'
 import { openaiCompatible } from './openai.js'
+import { TurnContext } from './turn-context.js'
 import { localityOfUrl } from '../privacy/index.js'
 
 export const OLLAMA_URL = 'http://localhost:11434'
@@ -44,8 +45,7 @@ export function ollama(options: OllamaOptions): Model {
   const contextWindow = options.contextWindow ?? 16384
   const doFetch = options.fetch ?? fetch
   const thinkMode = options.think ?? 'auto'
-  // User messages as first sent (with the context they carried then).
-  const sent = new WeakMap<Message, string>()
+  const turn = new TurnContext()
   let capabilities: Promise<string[]> | undefined
   const capabilitiesOf = () =>
     (capabilities ??= doFetch(`${baseURL}/api/show`, {
@@ -64,7 +64,7 @@ export function ollama(options: OllamaOptions): Model {
       const messages = request.messages as Message[]
       let think: boolean | string = thinkMode === 'auto' ? messages.at(-1)?.role === 'user' : thinkMode
       if (thinkMode === 'auto' && !(await capabilitiesOf()).includes('thinking')) think = false
-      const wire = toOllamaMessages(request, sent)
+      const wire = toOllamaMessages(request, turn)
       const promptChars = JSON.stringify(wire).length
       const started = performance.now()
       let firstTokenMs: number | undefined
@@ -153,25 +153,12 @@ export function ollama(options: OllamaOptions): Model {
   }
 }
 
-/**
- * Context goes on the newest user message, frozen as first sent, so every step
- * of a turn extends the same prompt and reuses the cache. Earlier turns carry
- * no context (stale passages would pile up uncounted), so a new turn re-reads
- * from the first user message on, like WebLLM's `current-turn` default.
- */
-function toOllamaMessages(request: ModelRequest, sent: WeakMap<Message, string>): unknown[] {
-  const messages = request.messages as Message[]
-  const lastUser = messages.findLastIndex((m) => m.role === 'user')
-  const out: unknown[] = [{ role: 'system', content: request.system }]
-  for (const [i, m] of messages.entries()) {
-    if (m.role === 'user') {
-      let content = m.content
-      if (i === lastUser) {
-        content = sent.get(m) ?? (request.context ? `<context>\n${request.context}\n</context>\n\n${m.content}` : m.content)
-        sent.set(m, content)
-      }
-      out.push({ role: 'user', content })
-    } else if (m.role === 'assistant') {
+function toOllamaMessages(request: ModelRequest, turn: TurnContext): unknown[] {
+  const { userContent, changedContext } = turn.layout(request)
+  const out: { role: string; content: string; [key: string]: unknown }[] = [{ role: 'system', content: request.system }]
+  for (const [i, m] of (request.messages as Message[]).entries()) {
+    if (m.role === 'user') out.push({ role: 'user', content: userContent(m, i) })
+    else if (m.role === 'assistant') {
       out.push({
         role: 'assistant',
         content: m.content,
@@ -183,12 +170,7 @@ function toOllamaMessages(request: ModelRequest, sent: WeakMap<Message, string>)
       out.push({ role: 'tool', tool_name: m.name, content: m.content })
     }
   }
-  // Context that changed after the newest user message was sent (a write
-  // changed the schema, say) goes after the latest tool result instead.
-  if (request.context && sent.get(messages[lastUser]!) !== undefined && !sent.get(messages[lastUser]!)!.includes(request.context)) {
-    const last = out.at(-1) as { role: string; content: string }
-    if (last.role === 'tool') last.content = `${last.content}\n\n<context>\n${request.context}\n</context>`
-  }
+  if (changedContext) out.at(-1)!.content += changedContext
   return out
 }
 
@@ -202,6 +184,13 @@ export interface LMStudioOptions {
   /** Informs the agent's context budgeting. Set the actual size when loading the model in LM Studio. */
   contextWindow?: number
   temperature?: number
+  /**
+   * Reasoning for thinking-capable models. `'auto'` (default) reasons on new
+   * user requests and answers directly after tool results, as with WebLLM and
+   * Ollama. LM Studio honours `reasoning_effort: 'none'`; `chat_template_kwargs`
+   * and `reasoning.effort` were ignored in testing (0.4.25).
+   */
+  think?: boolean | 'auto'
   fetch?: typeof fetch
 }
 
@@ -211,6 +200,13 @@ export function lmstudio(options: LMStudioOptions): Model {
   const inner = openaiCompatible({
     baseURL,
     model: options.model,
+    // LM Studio's llama.cpp and MLX engines reuse their cache by prompt prefix.
+    contextPlacement: 'message',
+    requestBody: (request) => {
+      const think = options.think ?? 'auto'
+      const off = think === false || (think === 'auto' && request.messages.at(-1)?.role !== 'user')
+      return off ? { reasoning_effort: 'none' } : {}
+    },
     ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
     ...(options.fetch ? { fetch: options.fetch } : {}),
   })
@@ -342,7 +338,7 @@ export function localModel(info: LocalModelInfo, overrides: { contextWindow?: nu
   const contextWindow = overrides.contextWindow ?? Math.min(info.contextLength ?? 16384, 32768)
   return info.provider === 'ollama'
     ? ollama({ model: info.id, contextWindow, ...(overrides.think !== undefined ? { think: overrides.think } : {}) })
-    : lmstudio({ model: info.id, contextWindow })
+    : lmstudio({ model: info.id, contextWindow, ...(overrides.think !== undefined && overrides.think !== 'low' && overrides.think !== 'medium' && overrides.think !== 'high' ? { think: overrides.think } : {}) })
 }
 
 // ---------------------------------------------------------------------------

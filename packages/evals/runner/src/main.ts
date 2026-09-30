@@ -1,5 +1,5 @@
 import { formatReport, runEval } from '@enclave/core/eval'
-import { ollama, ollamaEmbedder } from '@enclave/core/models/local'
+import { lmstudio, localEmbedder, ollama, ollamaEmbedder, OLLAMA_EMBEDDING_PRESETS } from '@enclave/core/models/local'
 import { createWebEnclave, type ThinkingMode } from '@enclave/core/web'
 import { ALL_CASES } from '../../src/suites/index.js'
 import { prepareWorld, suiteSkills } from '../../src/world.js'
@@ -26,6 +26,15 @@ const config = {
 // `model=ollama:qwen3.8:27b-q4_K_M` runs the suite on a local Ollama model
 // instead of WebLLM; everything else (world, graders, statistics) is shared.
 const ollamaTag = config.model.startsWith('ollama:') ? config.model.slice('ollama:'.length) : undefined
+// `model=lmstudio:<identifier>`: a model already loaded in LM Studio (`lms load … --context-length`).
+const lmstudioId = config.model.startsWith('lmstudio:') ? config.model.slice('lmstudio:'.length) : undefined
+
+/** `lmstudio:<id>` embeddings, with the measured prompts when the model matches a preset (e.g. embeddinggemma). */
+function lmstudioEmbedder(id: string) {
+  const preset = Object.entries(OLLAMA_EMBEDDING_PRESETS).find(([name]) => id.toLowerCase().includes(name.split(':')[0]!))?.[1]
+  if (!preset) throw new Error(`No embedding preset matches ${id}`)
+  return localEmbedder({ ...preset, provider: 'lmstudio', model: id })
+}
 const label = params.get('label') ?? `${config.model} thinking=${config.thinking} history=${config.reasoningHistory} embedding=${config.embedding} reranker=${config.reranker}${config.searchMode ? ` search=${config.searchMode}` : ''}`
 
 try {
@@ -36,10 +45,18 @@ try {
       llm: new Worker(new URL('./llm.worker.ts', import.meta.url), { type: 'module' }),
     },
     dataDir: 'memory://',
-    llm: ollamaTag ? ollama({ model: ollamaTag, contextWindow: config.ctx, think: config.thinking }) : config.model,
+    llm: ollamaTag
+      ? ollama({ model: ollamaTag, contextWindow: config.ctx, think: config.thinking })
+      : lmstudioId
+        ? lmstudio({ model: lmstudioId, contextWindow: config.ctx, think: config.thinking })
+        : config.model,
     thinking: config.thinking,
     // `embedding=ollama:embeddinggemma` embeds through Ollama with the measured preset.
-    embedding: config.embedding.startsWith('ollama:') ? ollamaEmbedder(config.embedding.slice('ollama:'.length)) : config.embedding,
+    embedding: config.embedding.startsWith('ollama:')
+      ? ollamaEmbedder(config.embedding.slice('ollama:'.length))
+      : config.embedding.startsWith('lmstudio:')
+        ? lmstudioEmbedder(config.embedding.slice('lmstudio:'.length))
+        : config.embedding,
     reranker: config.reranker === 'none' ? false : config.reranker,
     webllm: { reasoningHistory: config.reasoningHistory, constrainToolCalls: config.constrainToolCalls },
     skills: suiteSkills(),

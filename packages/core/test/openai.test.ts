@@ -44,7 +44,7 @@ describe('openaiCompatible', () => {
         ],
       }),
     )
-    expect(chunks).toEqual([
+    expect(chunks.map(({ metrics: _m, ...c }: any) => c)).toEqual([
       { type: 'reasoning', delta: 'hmm' },
       { type: 'text', delta: 'Hi' },
       { type: 'tool-call', call: { id: 'c1', name: 'look', input: { a: 1 } } },

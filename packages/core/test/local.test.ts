@@ -198,3 +198,41 @@ describe('measured Ollama presets', () => {
     expect(recommendOllamaModel([m('llama3:8b')])).toBeUndefined()
   })
 })
+
+describe('lmstudio context placement', () => {
+  it('keeps context off the system prompt so steps share a cache prefix (OpenAI default is unchanged)', async () => {
+    const bodies: any[] = []
+    const fetch = async (_u: string | URL | Request, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init!.body)))
+      return new Response('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n')
+    }
+    const user = { role: 'user' as const, content: 'how many orders?' }
+    const call = { role: 'assistant' as const, content: '', toolCalls: [{ id: 'a', name: 'q', input: {} }] }
+    const tool = { role: 'tool' as const, toolCallId: 'a', name: 'q', content: '[42]' }
+    const model = lmstudio({ model: 'qwen/qwen3.6-27b', fetch })
+    await collect(model.stream({ system: 'S', context: 'schema v1', tools: [], messages: [user] }))
+    await collect(model.stream({ system: 'S', context: 'schema v1', tools: [], messages: [user, call, tool] }))
+    expect(bodies[0].messages[0]).toEqual({ role: 'system', content: 'S' })
+    expect(bodies[0].messages[1].content).toContain('<context>\nschema v1')
+    expect(JSON.stringify(bodies[1].messages.slice(0, 2))).toBe(JSON.stringify(bodies[0].messages))
+
+    const { openaiCompatible } = await import('../src/models/openai.js')
+    const remote = openaiCompatible({ baseURL: 'https://api.example/v1', model: 'm', fetch })
+    await collect(remote.stream({ system: 'S', context: 'schema v1', tools: [], messages: [user] }))
+    expect(bodies[2].messages[0].content).toBe('S\n\nschema v1')
+  })
+
+  it("turns reasoning off after tool results ('auto') via reasoning_effort", async () => {
+    const bodies: any[] = []
+    const fetch = async (_u: string | URL | Request, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init!.body)))
+      return new Response('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n')
+    }
+    const user = { role: 'user' as const, content: 'q' }
+    const model = lmstudio({ model: 'm', fetch })
+    await collect(model.stream({ system: '', tools: [], messages: [user] }))
+    await collect(model.stream({ system: '', tools: [], messages: [user, { role: 'assistant', content: '', toolCalls: [{ id: 'a', name: 't', input: {} }] }, { role: 'tool', toolCallId: 'a', name: 't', content: 'r' }] }))
+    await collect(lmstudio({ model: 'm', fetch, think: false }).stream({ system: '', tools: [], messages: [user] }))
+    expect(bodies.map((b) => b.reasoning_effort)).toEqual([undefined, 'none', 'none'])
+  })
+})
