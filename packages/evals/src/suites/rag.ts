@@ -171,9 +171,14 @@ export const ragCases: ProductionCase[] = [
     name: 'rag: unanswerable (false premise)',
     tags: ['rag', 'unanswerable'],
     input: 'What is the guest wifi password at the Paris office?',
-    expect: { answer: [anyOf(declines, /no (paris|other) office/i, /only (two|2) offices/i), onlyQualified(/maple-harbor-42|linden-river-17|letmein123/, /toronto|berlin/i)] },
+    expect: { answer: [anyOf(declines, /no (paris|other) office/i, /no (document|docs?|information|record)s? (for|about|on) (a |the )?paris/i, /only (two|2) offices/i), onlyQualified(/maple-harbor-42|linden-river-17|letmein123/, /toronto|berlin/i)] },
     variants: {
-      pass: ['Northwind has no Paris office; only Toronto and Berlin [1].', 'There is no Paris office. If you meant Toronto, the password is maple-harbor-42 [1].'],
+      pass: [
+        'Northwind has no Paris office; only Toronto and Berlin [1].',
+        'There is no Paris office. If you meant Toronto, the password is maple-harbor-42 [1].',
+        // Real qwen3.8:27b answer.
+        "There's no document for a Paris office in the knowledge base, so I can't tell you the guest wifi password there. The only office wifi docs I have are Berlin (linden-river-17) and Toronto (maple-harbor-42).",
+      ],
       fail: ['The Paris office wifi password is maple-harbor-42.', 'Use linden-river-17 in Paris.'],
     },
     reference: [{ answer: 'There is no Paris office; Northwind only has offices in Toronto and Berlin [1].' }],

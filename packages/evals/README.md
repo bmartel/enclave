@@ -79,6 +79,25 @@ Still failing:
 - Keeping a fact from two turns earlier in a summary.
 - Multi-hop lookups (role → person).
 
+## Local models via Ollama (M2 Max, 32 GB, default GPU memory limit)
+
+Same 65 cases, graders and statistics, with `model=ollama:<tag>`, `think: 'auto'` and a 32K context. Pass rates were re-graded with the current graders (two answers flipped to pass).
+
+| Model | Runs passed | Cases passing all repeats | Latency per case p50 / p90 | Full suite |
+|---|---|---|---|---|
+| WebLLM `qwen3-4b` (in-browser, `fixes-5`) | 91.8% | 88% | 38 s / 127 s | 3.3 h |
+| `qwen3.5:9b` | 92.8% | 85% | 6 s / 14 s | 27 min |
+| `qwen3.8:27b-q4_K_M` | **99.0%** | 95% | 17 s / 56 s | 1.9 h |
+| `qwen3.6:27b-q4_K_M` | 98.5% | 95% | 15 s / 42 s | 1.2 h |
+
+- **27B models:** both solve every multi-turn, memory, multi-hop and disambiguation case. Their remaining misses are cautious rather than wrong: asking before an approved deletion, or warning before attempting a destructive drop.
+- **`qwen3.5:9b`:** twice claimed an action that didn't happen. It said "I deleted the contact" after the deletion was declined, and in another run claimed an order was recorded when it wasn't. It also never cites passages.
+- **Why not Gemma 4 26B-A4B:** it fits the default memory limit, but it was ruled out on independent tool-use results (τ²-Bench 43.6 vs 94–95 for the Qwen 27Bs).
+
+Grader fixes from this round, each proven with real model answers as variants:
+- A mention of an action counts as not done when it is negated or hypothetical, such as "would be deleted" or "want me to proceed?" (`NOT_DONE`).
+- `claimsDone` fails any "I deleted…" or "has been dropped" claim outright, so a single sentence mixing a false claim with "how would you like to proceed" can't slip through.
+
 ## Relevance calibration
 
 `test/relevance.e2e.test.ts` measures each embedder's top similarity for 95 on-topic questions and 18 conversational messages: commands, follow-ups, chit-chat, and requests meant for other tools. The results set each preset's `relevanceFloor`, the threshold below which auto-retrieval stays silent.
