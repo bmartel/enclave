@@ -173,6 +173,7 @@ Measured with the production evals, on an M2 Max with 32 GB, Ollama 0.35 and the
 | `qwen3.5:9b` (fast) | 92.8% | 6 s | 6.6 GB |
 | In-browser WebLLM Qwen3 4B, for comparison | 91.8% | 38 s | 2.3 GB |
 
+- End to end on the full local stack (`qwen3.6:27b` for chat, Ollama `embeddinggemma` for search): **99%** [96–100%] of runs passed, and 97% of cases passed all 3 repeats.
 - The 27B models tie on quality. `qwen3.6` is 25% faster at p90.
 - `qwen3.5:9b` twice claimed an action that had not happened. Use a 27B where actions matter.
 

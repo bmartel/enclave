@@ -89,6 +89,7 @@ Same 65 cases, graders and statistics, with `model=ollama:<tag>`, `think: 'auto'
 | `qwen3.5:9b` | 92.8% | 85% | 6 s / 14 s | 27 min |
 | `qwen3.8:27b-q4_K_M` | **99.0%** | 95% | 17 s / 56 s | 1.9 h |
 | `qwen3.6:27b-q4_K_M` | 98.5% | 95% | 15 s / 42 s | 1.2 h |
+| **`qwen3.6:27b-q4_K_M` + Ollama `embeddinggemma`** (fully local server stack) | **99%** [96–100%] | **97%** | 18 s / 54 s | 1.5 h |
 
 - **27B models:** both solve every multi-turn, memory, multi-hop and disambiguation case. Their remaining misses are cautious rather than wrong: asking before an approved deletion, or warning before attempting a destructive drop.
 - **`qwen3.5:9b`:** twice claimed an action that didn't happen. It said "I deleted the contact" after the deletion was declined, and in another run claimed an order was recorded when it wasn't. It also never cites passages.
