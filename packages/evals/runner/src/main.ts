@@ -63,6 +63,12 @@ try {
     ...(config.searchMode ? { knowledge: { defaultMode: config.searchMode } } : {}),
     onProgress: (p) => ($('status').textContent = p.text),
   })
+  // Fail fast when the model can't answer at all (server down, CORS blocked),
+  // instead of recording a 0% report.
+  $('status').textContent = 'Checking the model responds…'
+  for await (const chunk of ai.model.stream({ system: 'Reply with OK.', messages: [{ role: 'user', content: 'OK?' }], tools: [] })) {
+    if (chunk.type === 'finish') break
+  }
   $('status').textContent = 'Preparing world (corpus, databases)…'
   await prepareWorld(ai)
   await (ai.model as { load?(): Promise<void> }).load?.()
