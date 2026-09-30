@@ -1,5 +1,5 @@
 import { formatReport, runEval } from '@enclave/core/eval'
-import { ollama } from '@enclave/core/models/local'
+import { ollama, ollamaEmbedder } from '@enclave/core/models/local'
 import { createWebEnclave, type ThinkingMode } from '@enclave/core/web'
 import { ALL_CASES } from '../../src/suites/index.js'
 import { prepareWorld, suiteSkills } from '../../src/world.js'
@@ -38,7 +38,8 @@ try {
     dataDir: 'memory://',
     llm: ollamaTag ? ollama({ model: ollamaTag, contextWindow: config.ctx, think: config.thinking }) : config.model,
     thinking: config.thinking,
-    embedding: config.embedding,
+    // `embedding=ollama:embeddinggemma` embeds through Ollama with the measured preset.
+    embedding: config.embedding.startsWith('ollama:') ? ollamaEmbedder(config.embedding.slice('ollama:'.length)) : config.embedding,
     reranker: config.reranker === 'none' ? false : config.reranker,
     webllm: { reasoningHistory: config.reasoningHistory, constrainToolCalls: config.constrainToolCalls },
     skills: suiteSkills(),
