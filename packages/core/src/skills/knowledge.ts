@@ -197,7 +197,9 @@ export function knowledgeSkill(options: KnowledgeSkillOptions = {}) {
       ]
       const users = messages.filter((m) => m.role === 'user' && !m.synthetic)
       const latest = users.at(-1)?.content.trim()
-      if (auto && latest) {
+      // "Summarize both of those" works on earlier answers, not the documents:
+      // retrieved passages would only pull the model off the conversation.
+      if (auto && latest && !OPERATES_ON_CONVERSATION.test(latest)) {
         const hits = await retrieve(knowledge, latest, users.at(-2)?.content.trim())
         if (hits.length) {
           sections.push(
@@ -209,5 +211,9 @@ export function knowledgeSkill(options: KnowledgeSkillOptions = {}) {
     },
   })
 }
+
+/** A request to transform earlier answers ("summarize both of those", "translate it"). */
+const OPERATES_ON_CONVERSATION =
+  /^(please\s+|can you\s+|could you\s+)?(summari[sz]e|recap|combine|rephrase|reword|shorten|simplify|translate|repeat)\s+(both of |all of )?(both|those|them|it|the above|everything|what you (just )?said)\b/i
 
 const wordCount = (text: string) => text.split(/\s+/).filter(Boolean).length

@@ -85,6 +85,10 @@ export function fromTextModel(model: TextModel, options: TextProtocolOptions = {
           sent,
           context: inlineContext,
           keepReasoning: mode === 'current-turn' ? false : mode === 'all' ? true : (m) => !compacted.has(m),
+          // Earlier turns are re-read at every new turn in this mode anyway
+          // (their reasoning is dropped), so their stale context only costs
+          // prefill and distracts; with 'all'/'auto' the cache survives turns.
+          dropOldContext: mode === 'current-turn',
         })
       let rendered = render()
       let didCompact = false
@@ -166,7 +170,12 @@ interface RenderOptions {
   context?: string | undefined
   /** Keep reasoning from earlier turns (per message when a function). */
   keepReasoning?: boolean | ((message: Message) => boolean)
+  /** Render messages from earlier turns without the context they carried. */
+  dropOldContext?: boolean
 }
+
+const CONTEXT_BLOCK = /^<context>\n[\s\S]*?\n<\/context>\n\n/
+const withContext = (context: string, text: string) => `<context>\n${context}\n</context>\n\n${text}`
 
 /**
  * Flatten tool traffic into user/assistant text turns (Qwen/Hermes layout).
@@ -184,9 +193,18 @@ export function renderMessages(messages: Message[], options: RenderOptions = {})
     else out.push({ role, content })
   }
 
+  // The context this turn already carries: re-attached only when it changes.
+  const turnContext = messages
+    .slice(lastUser, trailingStart)
+    .map((m) => options.sent?.get(m)?.match(CONTEXT_BLOCK)?.[0])
+    .findLast(Boolean)
+
   messages.forEach((m, i) => {
     const cached = options.sent?.get(m)
-    if (cached !== undefined) return push(m.role === 'assistant' ? 'assistant' : 'user', cached)
+    if (cached !== undefined) {
+      const text = options.dropOldContext && i < lastUser ? cached.replace(CONTEXT_BLOCK, '') : cached
+      return push(m.role === 'assistant' ? 'assistant' : 'user', text)
+    }
 
     let text: string
     if (m.role === 'user') text = m.content
@@ -204,8 +222,8 @@ export function renderMessages(messages: Message[], options: RenderOptions = {})
       }
     }
 
-    if (i === trailingStart && m.role !== 'assistant' && options.context) {
-      text = `<context>\n${options.context}\n</context>\n\n${text}`
+    if (i === trailingStart && m.role !== 'assistant' && options.context && turnContext !== withContext(options.context, '')) {
+      text = withContext(options.context, text)
     }
     if (i >= trailingStart) options.sent?.set(m, text)
     push(m.role === 'assistant' ? 'assistant' : 'user', text)

@@ -167,3 +167,34 @@ describe('text protocol robustness', () => {
     expect(stops).toEqual([undefined, ['<tool_response>']])
   })
 })
+
+describe('context in history', () => {
+  const user = (content: string) => ({ role: 'user' as const, content })
+  const call = { role: 'assistant' as const, content: '', toolCalls: [{ id: 'c', name: 'q', input: {} }] }
+  const tool = (content: string) => ({ role: 'tool' as const, toolCallId: 'c', name: 'q', content })
+
+  it('attaches context once per turn unless it changes', () => {
+    const sent = new WeakMap()
+    const u = user('how many orders?')
+    renderMessages([u], { sent, context: 'schema v1' })
+    const t1 = tool('[1]')
+    const step2 = renderMessages([u, call, t1], { sent, context: 'schema v1' })
+    expect(step2.map((m) => m.content).join('\n').match(/<context>/g)).toHaveLength(1)
+    const step3 = renderMessages([u, call, t1, call, tool('[2]')], { sent, context: 'schema v2' })
+    expect(step3.at(-1)!.content).toContain('schema v2') // changed: re-attached
+  })
+
+  it("drops earlier turns' context in current-turn mode and keeps it verbatim otherwise", () => {
+    const sent = new WeakMap()
+    const first = user('what is the wifi password?')
+    renderMessages([first], { sent, context: 'passages about wifi' })
+    const answer = { role: 'assistant' as const, content: 'maple-harbor-42' }
+    const next = user('and parking?')
+    const history = [first, answer, next]
+    const dropped = renderMessages(history, { sent, context: 'passages about parking', dropOldContext: true })
+    expect(dropped[0]!.content).toBe('what is the wifi password?')
+    expect(dropped.at(-1)!.content).toContain('passages about parking')
+    const kept = renderMessages(history, { sent, context: 'passages about parking' })
+    expect(kept[0]!.content).toContain('passages about wifi')
+  })
+})

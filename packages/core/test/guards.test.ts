@@ -295,3 +295,16 @@ describe('follow-through', () => {
     expect(model.requests).toHaveLength(3)
   })
 })
+
+describe('auto-retrieval skips requests about the conversation itself', () => {
+  it('retrieves nothing for "summarize both of those", but still for "summarize the newsletter"', async () => {
+    const embedder = { id: 'fake', dimensions: 1, relevanceFloor: 0.35, embed: async () => [[0]] } as Embedder
+    const kb = Object.create(Knowledge.prototype) as Knowledge
+    const hit = (id: string): SearchHit => ({ chunkId: 1, documentId: id, collection: 'handbook', title: id, source: null, content: `content of ${id}`, ordinal: 0, metadata: {}, score: 0.6, similarity: 0.6 })
+    Object.assign(kb, { embedder, collections: async () => [{ collection: 'handbook', documents: 1, chunks: 1 }], search: async () => [hit('parking')] })
+    const context = async (...users: string[]) =>
+      (await knowledgeSkill().context!({ db, knowledge: kb, embedder, threadId: 't', messages: users.map((content) => ({ role: 'user' as const, content })) })) ?? ''
+    expect(await context('Where can visitors park?', 'Summarize both of those for a visitor in two sentences.')).not.toContain('Retrieved passages')
+    expect(await context('Summarize the vendor newsletter for me.')).toContain('Retrieved passages')
+  })
+})
