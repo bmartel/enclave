@@ -105,6 +105,15 @@ Same 65 cases, graders and statistics, with `model=ollama:<tag>`, `think: 'auto'
 
 - **27B models:** both solve every multi-turn, memory, multi-hop and disambiguation case. Their remaining misses are cautious rather than wrong: asking before an approved deletion, or warning before attempting a destructive drop.
 - **`qwen3.5:9b`:** twice claimed an action that didn't happen. It said "I deleted the contact" after the deletion was declined, and in another run claimed an order was recorded when it wasn't. It also never cites passages.
+- **LM Studio 0.4.25, same evals:**
+
+  | Model | GGUF | MLX |
+  |---|---|---|
+  | `qwen3.6-27b` | 99.5% | 97.4% |
+  | `qwen3.5-9b` | 93.3% | 90.8% |
+
+  - Full stack with LM Studio's EmbeddingGemma: 99.5%, at 14 s / 37 s per case (p50 / p90).
+  - GGUF files are identical to Ollama's, and quality is identical too. MLX was not faster on the M2 Max.
 - **Why not Gemma 4 26B-A4B:** it fits the default memory limit, but it was ruled out on independent tool-use results (τ²-Bench 43.6 vs 94–95 for the Qwen 27Bs).
 
 Grader fixes from this round, each proven with real model answers as variants:

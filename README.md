@@ -191,7 +191,12 @@ Qwen3-Embedding needs its exact instruction format. A paraphrased instruction dr
 - **Ollama** uses the native `/api/chat` endpoint, which supports `num_ctx`, thinking and tools. The OpenAI-compatible endpoint ignores `num_ctx`, and Ollama's default window is too small for agents.
   - Prompts are laid out for Ollama's prompt cache: live context rides on the newest message. A follow-up step reads its prompt in about 0.3–0.6 s, against 2–8 s cold.
   - `think: 'auto'` (the default) reasons on new requests, answers directly after tool results, and applies only to models that support thinking.
-- **LM Studio** uses its OpenAI-compatible server. Enable CORS in its server settings.
+- **LM Studio** uses its OpenAI-compatible server, with the same cache-friendly context layout and `think: 'auto'`, which sends `reasoning_effort: 'none'` after tool results.
+  - Measured on the same evals (LM Studio 0.4.25), the GGUF builds match Ollama: `qwen3.6-27b` scored 99.5%, and 99.5% as a full stack with LM Studio's EmbeddingGemma.
+  - The MLX builds were not faster on an M2 Max and scored slightly lower (97.4% / 90.8%), so prefer the GGUF variants.
+  - **CORS:** browser apps need `lms server start --cors`, and that lets *any* website you visit call the server. Ollama allows only localhost origins by default. Enable CORS only while you need it.
+  - **Context window:** set it at load time (`lms load <model> --context-length 32768`), and pass the same value as `contextWindow`.
+  - **Variants:** `lms load` can't pick a variant when a model has both MLX and GGUF builds. Choose the variant in the app, or keep only one downloaded.
 - **Discovery** reports tool support, context length and loaded state.
 - **`localEmbedder`** computes embeddings on either server. Setting `dimensions` below the model's output truncates Matryoshka models; pgvector's HNSW index takes at most 2000 dimensions.
 
