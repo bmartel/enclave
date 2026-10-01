@@ -1,0 +1,386 @@
+{
+  "label": "target-1",
+  "passRate": 0.75,
+  "overall": {
+    "passed": 3,
+    "total": 4,
+    "rate": 0.75,
+    "low": 0.3006360524426366,
+    "high": 0.9544139373553637
+  },
+  "consistency": {
+    "allRepeats": {
+      "passed": 1,
+      "total": 2,
+      "rate": 0.5,
+      "low": 0.09452865480086614,
+      "high": 0.9054713451991339
+    },
+    "anyRepeat": {
+      "passed": 1,
+      "total": 2,
+      "rate": 0.5,
+      "low": 0.09452865480086614,
+      "high": 0.9054713451991339
+    },
+    "repeats": 3
+  },
+  "byTag": [
+    {
+      "tag": "join",
+      "passed": 0,
+      "total": 1,
+      "rate": 0,
+      "low": 0,
+      "high": 0.7934567085261071
+    },
+    {
+      "tag": "multi-hop",
+      "passed": 3,
+      "total": 3,
+      "rate": 1,
+      "low": 0.43849391955098227,
+      "high": 1
+    },
+    {
+      "tag": "rag",
+      "passed": 3,
+      "total": 3,
+      "rate": 1,
+      "low": 0.43849391955098227,
+      "high": 1
+    },
+    {
+      "tag": "recovery",
+      "passed": 0,
+      "total": 1,
+      "rate": 0,
+      "low": 0,
+      "high": 0.7934567085261071
+    },
+    {
+      "tag": "sql",
+      "passed": 0,
+      "total": 1,
+      "rate": 0,
+      "low": 0,
+      "high": 0.7934567085261071
+    }
+  ],
+  "results": [
+    {
+      "name": "rag: multi-hop across documents",
+      "tags": [
+        "rag",
+        "multi-hop"
+      ],
+      "repeat": 0,
+      "passed": true,
+      "failures": [],
+      "text": "The expense policy states that any single expense over $500 requires approval from the Director of Finance [1]. According to the Leadership Directory, the Director of Finance is **Priya Raman** [3]. \n\n**Answer:** The Director of Finance, Priya Raman, must approve this $750 expense.",
+      "calls": [],
+      "toolErrors": 0,
+      "steps": 1,
+      "durationMs": 25428,
+      "timeToFirstTokenMs": 8855,
+      "prefillTokens": 3115,
+      "outputTokens": 221,
+      "kvReuseRate": 0,
+      "turns": [
+        {
+          "index": 0,
+          "input": "I have a 750 dollar conference registration to expense. Who has to approve it? Give me their name.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The expense policy states that any single expense over $500 requires approval from the Director of Finance [1]. According to the Leadership Directory, the Director of Finance is **Priya Raman** [3]. \n\n**Answer:** The Director of Finance, Priya Raman, must approve this $750 expense.",
+          "calls": [],
+          "toolErrors": 0,
+          "steps": 1,
+          "durationMs": 25428,
+          "timeToFirstTokenMs": 8855,
+          "prefillTokens": 3115,
+          "outputTokens": 221,
+          "promptChars": 12197,
+          "compacted": false,
+          "kvReuseRate": 0,
+          "reasoningChars": 623
+        }
+      ]
+    },
+    {
+      "name": "rag: multi-hop across documents",
+      "tags": [
+        "rag",
+        "multi-hop"
+      ],
+      "repeat": 1,
+      "passed": true,
+      "failures": [],
+      "text": "The expense policy states that any single expense over $500 requires approval from the Director of Finance [1]. According to the leadership directory, the Director of Finance is Priya Raman [3]. \n\n**Answer:** Priya Raman.",
+      "calls": [],
+      "toolErrors": 0,
+      "steps": 1,
+      "durationMs": 22212,
+      "timeToFirstTokenMs": 8710,
+      "prefillTokens": 3115,
+      "outputTokens": 181,
+      "kvReuseRate": 0,
+      "turns": [
+        {
+          "index": 0,
+          "input": "I have a 750 dollar conference registration to expense. Who has to approve it? Give me their name.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The expense policy states that any single expense over $500 requires approval from the Director of Finance [1]. According to the leadership directory, the Director of Finance is Priya Raman [3]. \n\n**Answer:** Priya Raman.",
+          "calls": [],
+          "toolErrors": 0,
+          "steps": 1,
+          "durationMs": 22212,
+          "timeToFirstTokenMs": 8710,
+          "prefillTokens": 3115,
+          "outputTokens": 181,
+          "promptChars": 12197,
+          "compacted": false,
+          "kvReuseRate": 0,
+          "reasoningChars": 577
+        }
+      ]
+    },
+    {
+      "name": "rag: multi-hop across documents",
+      "tags": [
+        "rag",
+        "multi-hop"
+      ],
+      "repeat": 2,
+      "passed": true,
+      "failures": [],
+      "text": "The expense policy states that any single expense over $500 requires approval from the Director of Finance [1]. According to the Leadership Directory, the Director of Finance is **Priya Raman** [3]. \n\n**Answer:** Priya Raman.",
+      "calls": [],
+      "toolErrors": 0,
+      "steps": 1,
+      "durationMs": 26575,
+      "timeToFirstTokenMs": 8701,
+      "prefillTokens": 3115,
+      "outputTokens": 238,
+      "kvReuseRate": 0,
+      "turns": [
+        {
+          "index": 0,
+          "input": "I have a 750 dollar conference registration to expense. Who has to approve it? Give me their name.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The expense policy states that any single expense over $500 requires approval from the Director of Finance [1]. According to the Leadership Directory, the Director of Finance is **Priya Raman** [3]. \n\n**Answer:** Priya Raman.",
+          "calls": [],
+          "toolErrors": 0,
+          "steps": 1,
+          "durationMs": 26575,
+          "timeToFirstTokenMs": 8701,
+          "prefillTokens": 3115,
+          "outputTokens": 238,
+          "promptChars": 12197,
+          "compacted": false,
+          "kvReuseRate": 0,
+          "reasoningChars": 764
+        }
+      ]
+    },
+    {
+      "name": "sql: vocabulary mismatch",
+      "tags": [
+        "sql",
+        "join",
+        "recovery"
+      ],
+      "repeat": 0,
+      "passed": false,
+      "failures": [
+        "expected the answer to state 33932"
+      ],
+      "text": "The Fleet Console has generated a total revenue of $35,928.00.",
+      "calls": [
+        {
+          "name": "execute_sql",
+          "input": {
+            "sql": "SELECT SUM(quantity * unit_price) AS total_revenue FROM order_items JOIN products ON order_items.product_id = products.id WHERE products.name = 'Fleet Console';"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 2,
+      "durationMs": 127288,
+      "timeToFirstTokenMs": 7220,
+      "prefillTokens": 2798,
+      "outputTokens": 1489,
+      "kvReuseRate": 0.5,
+      "turns": [
+        {
+          "index": 0,
+          "input": "How much revenue has the Fleet Console brought in?",
+          "graded": true,
+          "passed": false,
+          "failures": [
+            "expected the answer to state 33932"
+          ],
+          "text": "The Fleet Console has generated a total revenue of $35,928.00.",
+          "calls": [
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "SELECT SUM(quantity * unit_price) AS total_revenue FROM order_items JOIN products ON order_items.product_id = products.id WHERE products.name = 'Fleet Console';"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 127288,
+          "timeToFirstTokenMs": 7220,
+          "prefillTokens": 2798,
+          "outputTokens": 1489,
+          "promptChars": 17669,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 6505,
+          "reasoningTail": "sales. So if the product is inactive, maybe it's not sold. However, the problem doesn't specify, so perhaps we include all entries. But the products table's active column is not mentioned in the question. So maybe the answer is to include all entries, regardless of active status. But the problem says \"brought in,\" which might refer to sales, so perhaps only active products. However, the problem doesn't specify, so perhaps the answer is to include all entries. But the products table's active column is a boolean, and the default is true. But the question doesn't mention anything about active products, so perhaps we should include all entries where the product name is 'Fleet Console', regardless of active status. However, the problem says \"revenue has the Fleet Console brought in,\" which is about sales, so maybe the product must be active. But since the problem doesn't specify, perhaps the answer is to include all entries. But the products table's active column is not part of the order_items or orders tables, so the revenue is calculated based on the product's sales, regardless of active status. Therefore, the query should include all entries where the product name is 'Fleet Console'.\n\nSo the SQL query is as above.\n\nNow, the user's database is in the SQL table. So I need to execute this query using the execute_sql function.\n\nBut the user's database has the products table with the name 'Fleet Console', so the query should work.\n\nSo the correct tool call is to execute this SQL.\n\n\n"
+        }
+      ]
+    }
+  ],
+  "byCase": [
+    {
+      "name": "rag: multi-hop across documents",
+      "tags": [
+        "rag",
+        "multi-hop"
+      ],
+      "passRate": 1,
+      "passed": 3,
+      "runs": 3,
+      "meanMs": 24738,
+      "failures": []
+    },
+    {
+      "name": "sql: vocabulary mismatch",
+      "tags": [
+        "sql",
+        "join",
+        "recovery"
+      ],
+      "passRate": 0,
+      "passed": 0,
+      "runs": 1,
+      "meanMs": 127288,
+      "failures": [
+        "expected the answer to state 33932"
+      ]
+    }
+  ],
+  "latency": {
+    "meanMs": 50376,
+    "p50Ms": 26575,
+    "p90Ms": 127288,
+    "ttftP50Ms": 8710
+  },
+  "tokens": {
+    "meanOutput": 532,
+    "meanPrefill": 3036
+  },
+  "toolErrorRate": 0,
+  "kvReuseRate": 0.125,
+  "stopped": {
+    "reason": "fail-fast: sql: vocabulary mismatch #0",
+    "ranRuns": 4,
+    "plannedRuns": 6
+  },
+  "config": {
+    "model": "qwen3-4b",
+    "thinking": "auto",
+    "reasoningHistory": "current-turn",
+    "constrainToolCalls": true,
+    "embedding": "auto",
+    "reranker": "auto",
+    "searchMode": null,
+    "repeats": 3,
+    "only": null,
+    "cases": [
+      "rag: multi-hop across documents",
+      "sql: vocabulary mismatch"
+    ],
+    "failFast": true,
+    "ctx": 32768
+  },
+  "environment": {
+    "device": {
+      "webgpu": true,
+      "shaderF16": true,
+      "adapter": {
+        "vendor": "apple",
+        "architecture": "metal-3",
+        "description": ""
+      },
+      "maxStorageBufferMB": 4096,
+      "deviceMemoryGB": 32,
+      "mobile": false,
+      "gpuBudgetMB": 16384,
+      "crossOriginIsolated": false,
+      "storage": {
+        "quotaMB": 12928,
+        "usageMB": 2688,
+        "persisted": true
+      }
+    },
+    "plan": {
+      "llm": {
+        "preset": {
+          "id": "qwen3-4b",
+          "label": "Qwen3 4B",
+          "runtime": "webllm",
+          "model": "Qwen3-4B",
+          "params": "4B",
+          "vramMB": 3432,
+          "kvMBPer4k": 604,
+          "downloadMB": 2300,
+          "contextWindow": 16384,
+          "quality": 80,
+          "thinking": "hybrid"
+        },
+        "modelId": "Qwen3-4B-q4f16_1-MLC",
+        "contextWindow": 16384,
+        "estimatedMB": 5244
+      },
+      "embedding": {
+        "id": "embeddinggemma",
+        "label": "EmbeddingGemma 300M (best quality, 100+ languages)",
+        "model": "onnx-community/embeddinggemma-300m-ONNX",
+        "dimensions": 768,
+        "method": "sentence_embedding",
+        "queryPrefix": "task: search result | query: ",
+        "documentTemplate": "title: {title} | text: {text}",
+        "matryoshka": [
+          768,
+          512,
+          256,
+          128
+        ],
+        "dtype": {
+          "webgpu": "q4",
+          "webgpuF32": "q4",
+          "wasm": "q8"
+        },
+        "downloadMB": 197,
+        "maxTokens": 2048,
+        "languages": "multilingual",
+        "license": "gemma",
+        "searchMode": "vector",
+        "relevanceFloor": 0.35
+      }
+    },
+    "model": "webllm:Qwen3-4B-q4f16_1-MLC",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36"
+  },
+  "commit": "8c0e882",
+  "wallClockSec": 212
+}

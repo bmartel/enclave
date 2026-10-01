@@ -44,7 +44,19 @@ export interface AutoRetrieveOptions {
    * every relevant runner-up and drops the planted injection. Default 0.5.
    */
   relativeCutoff?: number
+  /**
+   * For questions asking who or for a name: follow role titles in the best
+   * passage ("approval from the Director of Finance") to the passage that
+   * names the person. On the 91 labeled queries it added a passage only where
+   * one was needed. Default true.
+   */
+  followRoles?: boolean
 }
+
+const ASKS_FOR_PERSON = /\b(who|whom|whose|name|contact)\b/i
+/** Role titles on one line: "Director of Finance", "Head of Security", "Office Manager". */
+const ROLE_TITLE =
+  /\b(?:Chief|Head|Director|Manager|Lead|Officer|Vice President|President|Coordinator|Administrator|Owner|Controller|Treasurer)(?:[ ](?:of|for)[ ](?:the[ ])?[A-Z][A-Za-z]+(?:[ ][A-Z][A-Za-z]+)?|[ ][A-Z][A-Za-z]+(?:[ ][A-Z][A-Za-z]+)?)?(?:[ ](?:Officer|Manager|Lead))?/g
 
 /**
  * Text that addresses an AI rather than a human reader: the signature of a
@@ -119,10 +131,23 @@ export function knowledgeSkill(options: KnowledgeSkillOptions = {}) {
   const search = async (knowledge: Knowledge, query: string) => {
     const scope = await scopeOf(knowledge)
     if (!scope.length) return []
-    return relevant(
+    const found = relevant(
       knowledge,
       await knowledge.search(query, { limit: auto?.limit ?? 3, minSimilarity: options.minSimilarity ?? 0.2, collection: scope }),
     )
+    if (auto?.followRoles === false || !found.length || !ASKS_FOR_PERSON.test(query)) return found
+    // One hop: role titles in the best passage that the question doesn't name.
+    const floor = auto?.minSimilarity ?? knowledge.embedder.relevanceFloor ?? 0.35
+    const titles = [...new Set(found[0]!.content.match(ROLE_TITLE) ?? [])].filter((t) => !query.toLowerCase().includes(t.toLowerCase()))
+    const have = new Set(found.map((h) => h.documentId))
+    for (const title of titles.slice(0, 2)) {
+      const [top] = await knowledge.search(title, { limit: 1, mode: 'vector', collection: scope })
+      if (top && (top.similarity ?? 0) >= floor && !have.has(top.documentId)) {
+        have.add(top.documentId)
+        found.push(top)
+      }
+    }
+    return found
   }
 
   // Steps within one turn share the same user message: search once per message.

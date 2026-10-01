@@ -314,3 +314,39 @@ describe('auto-retrieval skips requests about the conversation itself', () => {
     expect(await context('Summarize the vendor newsletter for me.')).toContain('Retrieved passages')
   })
 })
+
+describe('schema sample values', () => {
+  it('lists low-cardinality text values, skips sensitive and high-cardinality columns', async () => {
+    const { sqlSkill } = await import('../src/skills/index.js')
+    await db.exec(`create table products (id int primary key, name text not null, sku text, email text);
+      insert into products values (1, 'Fleet Console', 'A1', 'a@x.example'), (2, 'X100 Scanner', 'A2', 'b@x.example');
+      create table events (id int primary key, label text);
+      insert into events select g, 'event ' || g from generate_series(1, 40) g;`)
+    const context = (await sqlSkill().context!({ db, knowledge: undefined, embedder: undefined, threadId: 't', messages: [] }))!
+    expect(context).toMatch(/name text not null, -- values: 'Fleet Console', 'X100 Scanner'/)
+    expect(context).not.toContain('a@x.example') // sensitive column name
+    expect(context).not.toContain('event 1') // 40 distinct values: too many
+    const off = (await sqlSkill({ sampleValues: 0 }).context!({ db, knowledge: undefined, embedder: undefined, threadId: 't', messages: [] }))!
+    expect(off).not.toContain('values:')
+  })
+})
+
+describe('role follow-up in auto-retrieval', () => {
+  it('follows a role title to the passage that names the person, only for who/name questions', async () => {
+    const embedder = { id: 'fake', dimensions: 1, relevanceFloor: 0.35, embed: async () => [[0]] } as Embedder
+    const kb = Object.create(Knowledge.prototype) as Knowledge
+    const hit = (id: string, content: string, similarity: number): SearchHit => ({ chunkId: id.length, documentId: id, collection: 'handbook', title: id, source: null, content, ordinal: 0, metadata: {}, score: similarity, similarity })
+    Object.assign(kb, {
+      embedder,
+      collections: async () => [{ collection: 'handbook', documents: 2, chunks: 2 }],
+      search: async (q: string) =>
+        q === 'Director of Finance'
+          ? [hit('org-leadership', 'Director of Finance: Priya Raman', 0.38)]
+          : [hit('expenses', 'Expenses over $500 need approval from the Director of Finance.', 0.6)],
+    })
+    const context = async (q: string) =>
+      (await knowledgeSkill().context!({ db, knowledge: kb, embedder, threadId: 't', messages: [{ role: 'user', content: q }] })) ?? ''
+    expect(await context('Who approves a 750 dollar expense? Give me their name.')).toContain('Priya Raman')
+    expect(await context('What is the approval limit for expenses?')).not.toContain('Priya Raman')
+  })
+})

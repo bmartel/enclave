@@ -261,11 +261,13 @@ For small models, put guidance in tool results, where the model is looking when 
     - A short follow-up ("how much does it cost?") is searched again together with the previous question.
   - Documents are treated as untrusted. Paragraphs that address AI assistants ("ignore previous instructions…") are replaced with a removal notice before the model sees them, in auto-retrieval and in `search_knowledge` results. Flagging them wasn't enough: asked to summarise a poisoned document, Qwen3 4B still repeated the planted password in 2 of 3 runs. Such passages are also dropped from auto-retrieval unless they are the best match. `looksLikeInjection` and `redactInjections` are exported.
   - When a passage answers only part of a question (it names a role but not the person), the model is told to search for the rest.
-  - Tune with `autoRetrieve: { minSimilarity, relativeCutoff, limit, maxChars, minRerankScore }`.
+  - **Role follow-up.** For who/name questions, role titles in the best passage are followed to the passage that names the person. Example: "approval from the Director of Finance" leads to the leadership page. On the 91 labeled queries it added a passage only where one was needed, and it took the in-browser model's multi-hop case from 0/3 to 3/3. Turn it off with `followRoles: false`.
+  - Tune with `autoRetrieve: { minSimilarity, relativeCutoff, limit, maxChars, minRerankScore, followRoles }`.
   - Passages are cited as `[n]`.
 - **`sqlSkill({ readOnly, approveWrites, maxRows })`**
   - The database.build capability: live schema in context, plus `describe_schema` and `execute_sql`.
   - Writes need approval by default.
+  - **Sample values.** Text columns with up to 12 distinct values list them (`sampleValues`). The model can then tell that "the Fleet Console" is a product name. Columns that look sensitive (email, phone, password, token, key) are never sampled.
   - Table and column comments (`COMMENT ON`) are shown as SQL comments. They are the place to document business rules the model can't guess, such as "revenue excludes cancelled orders". Without that rule, Qwen3 4B wrote correct SQL but computed the wrong revenue.
   - The internal `enclave` schema is hidden from the model.
 - **`memorySkill()`**: `remember`, `recall` and `forget`, backed by the knowledge base. Recent facts are added to context. When the latest message asks to remember or forget something, a one-turn hint tells the model to call the tool. Otherwise small models reply "I'll remember that" and store nothing. `remember({ fact, replaces })` updates a fact in one call. `forget` and `replaces` can only delete memories, never documents. Memories are kept out of `knowledgeSkill` searches (`exclude`, default `['memory']`), so they can't pass as documents. `remember` refuses anything that looks like a credential or card number (`looksLikeSecret`), because prompting alone didn't stop Qwen3 4B from saving a password.

@@ -105,7 +105,7 @@ export async function seedBusinessDb(db: Db): Promise<void> {
     );
     -- Business rules live in the schema, where the sql skill shows them to the model.
     comment on table orders is 'Revenue counts only orders whose status is not cancelled.';
-    comment on column order_items.unit_price is 'Price per unit at order time. Revenue = quantity * unit_price.';
+    comment on column order_items.unit_price is 'Price per unit at order time. Revenue = quantity * unit_price, counting only orders whose status is not cancelled.';
     insert into customers (name, email, country, segment, created_at) values ${customers.join(',')};
     insert into products (name, category, price, active) values ${PRODUCTS.map(([n, c, p]) => `('${n}', '${c}', ${p}, ${n !== 'Legacy Cable'})`).join(',')};
     insert into orders (customer_id, status, ordered_at) values ${orders.join(',')};

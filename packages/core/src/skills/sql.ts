@@ -12,6 +12,13 @@ export interface SqlSkillOptions {
   approveWrites?: boolean
   /** Rows per result returned to the model. Default 100. */
   maxRows?: number
+  /**
+   * List the values of text columns that have at most this many distinct
+   * values, so the model can map a user's words to data ("the Fleet Console"
+   * is a product name). Columns that look sensitive (email, phone, password,
+   * token, key, secret) are never sampled. Default 12; 0 disables.
+   */
+  sampleValues?: number
 }
 
 const MUTATION = /\b(insert|update|delete|merge|create|alter|drop|truncate|grant|revoke|copy|vacuum|reindex|cluster|refresh|call|do)\b/i
@@ -38,6 +45,7 @@ export function sqlSkill(options: SqlSkillOptions = {}) {
   const schemas = options.schemas ?? ['public']
   const maxRows = options.maxRows ?? 100
   const readOnly = options.readOnly ?? false
+  const sampleValues = options.sampleValues ?? 12
 
   return defineSkill({
     name: 'sql',
@@ -58,7 +66,7 @@ export function sqlSkill(options: SqlSkillOptions = {}) {
           table: z.string().optional().describe('Only describe this table.'),
         }),
         execute: async ({ table }, { db }) => {
-          const ddl = await describe(db, schemas, table)
+          const ddl = await describe(db, schemas, table, sampleValues)
           return ddl || (table ? `No table named "${table}".` : 'The database has no tables yet.')
         },
       }),
@@ -92,7 +100,7 @@ export function sqlSkill(options: SqlSkillOptions = {}) {
       }),
     },
     context: async ({ db }) => {
-      const ddl = await describe(db, schemas)
+      const ddl = await describe(db, schemas, undefined, sampleValues)
       if (!ddl) return 'Database is empty.'
       return ddl.length > 4000 ? `${ddl.slice(0, 4000)}\n… (call describe_schema for the rest)` : ddl
     },
@@ -112,7 +120,22 @@ function compactRow(row: unknown): unknown {
   return out
 }
 
-async function describe(db: Db, schemas: string[], table?: string): Promise<string> {
+const SENSITIVE_COLUMN = /pass|secret|token|key|hash|email|phone|ssn|card|iban/i
+const quoteIdent = (name: string) => `"${name.replace(/"/g, '""')}"`
+
+/** Distinct values of a low-cardinality text column, or undefined when there are too many. */
+async function sampleColumn(db: Db, schema: string, table: string, column: string, max: number): Promise<string | undefined> {
+  const { rows } = await db
+    .query<{ v: string }>(
+      `select distinct ${quoteIdent(column)}::text as v from ${quoteIdent(schema)}.${quoteIdent(table)} where ${quoteIdent(column)} is not null limit ${max + 1}`,
+    )
+    .catch(() => ({ rows: [] as { v: string }[] }))
+  if (!rows.length || rows.length > max) return undefined
+  const values = rows.map((r) => `'${r.v.length > 40 ? `${r.v.slice(0, 40)}…` : r.v}'`).join(', ')
+  return `values: ${values.length > 300 ? `${values.slice(0, 300)}…` : values}`
+}
+
+async function describe(db: Db, schemas: string[], table?: string, sampleValues = 12): Promise<string> {
   const { rows: columns } = await db.query<{
     table_schema: string
     table_name: string
@@ -158,7 +181,12 @@ async function describe(db: Db, schemas: string[], table?: string): Promise<stri
     if (c.not_null) parts.push('not null')
     if (c.default_value) parts.push(`default ${c.default_value}`)
     if (c.table_comment) notes.set(key, oneLine(c.table_comment))
-    const line = { def: parts.join(' '), ...(c.column_comment ? { comment: oneLine(c.column_comment) } : {}) }
+    const comments = c.column_comment ? [oneLine(c.column_comment)] : []
+    if (sampleValues > 0 && /^(text|character varying|varchar|character|citext)/.test(c.type) && !SENSITIVE_COLUMN.test(c.column_name)) {
+      const sample = await sampleColumn(db, c.table_schema, c.table_name, c.column_name, sampleValues)
+      if (sample) comments.push(sample)
+    }
+    const line = { def: parts.join(' '), ...(comments.length ? { comment: comments.join('; ') } : {}) }
     tables.set(key, [...(tables.get(key) ?? []), line])
   }
   for (const k of constraints) {
