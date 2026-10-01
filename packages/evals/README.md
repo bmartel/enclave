@@ -58,6 +58,7 @@ Reports give pass rates with 95% Wilson intervals, per-tag breakdowns, and consi
 | `fixes-4` | 89% [84–93%] | 86% |
 | `fixes-5` | 92% [87–95%], significant vs baseline | 88% |
 | `fixes-6` (no stale context in history) | 90% [85–94%] | 82% |
+| `fixes-7` (role follow-up, lookup sample values) | **95% [91–98%]**, significant vs baseline | **92%** |
 
 The baseline's failures clustered around a few causes, each fixed in the library:
 
@@ -90,6 +91,17 @@ Still failing:
 | p90 time per case | 127 s | 95 s |
 
 "Correction mid-conversation" passed for the first time (3/3): stale passages had been pulling the final summary off the conversation.
+
+`fixes-7` fixes cases that had always failed:
+- multi-hop: 0/3 → 3/3
+- vocabulary mismatch: 0/3 → 3/3
+- ask when ambiguous: 0/3 → 3/3
+
+What still fails:
+- **Hardware limit:** the 4-turn "analysis that evolves" (turn 4 times out).
+- **Date arithmetic:** "this Friday" (1/3; off by one day).
+- **Summary drops a fact:** "correction mid-conversation" (1/3; it was 3/3 in `fixes-6`, so this one swings between runs).
+- **One-offs:** a missing citation, and one unneeded search.
 
 ## Local models via Ollama (M2 Max, 32 GB, default GPU memory limit)
 
