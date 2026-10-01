@@ -20,6 +20,12 @@ const config = {
   repeats: Number(params.get('repeats') ?? 3),
   tags: params.get('tags')?.split(',').filter(Boolean),
   only: params.get('only'),
+  /** Exact case names, `|`-separated (run.mjs fills this from `failedIn=<report>`). */
+  cases: params.get('cases')?.split('|').filter(Boolean),
+  /** Case names to run first, `|`-separated (from `firstFrom=<report>`). */
+  first: params.get('first')?.split('|').filter(Boolean),
+  failFast: params.get('failFast') === '1',
+  maxFailures: params.has('maxFailures') ? Number(params.get('maxFailures')) : undefined,
   /** Ollama context window (`num_ctx`), for `model=ollama:<tag>`. */
   ctx: Number(params.get('ctx') ?? 32768),
 }
@@ -74,7 +80,11 @@ try {
   await (ai.model as { load?(): Promise<void> }).load?.()
   $('status').textContent = `Running ${label}`
 
-  const cases = config.only ? ALL_CASES.filter((c) => c.name.includes(config.only!)) : ALL_CASES
+  const cases = config.cases
+    ? ALL_CASES.filter((c) => config.cases!.includes(c.name))
+    : config.only
+      ? ALL_CASES.filter((c) => c.name.includes(config.only!))
+      : ALL_CASES
   const planned = config.tags ? cases.filter((c) => c.tags.some((t) => config.tags!.includes(t))) : cases
   // Lets the run script report progress against the total.
   Object.assign(globalThis, { __evalPlan: { label, runs: planned.length * config.repeats, cases: planned.length, repeats: config.repeats } })
@@ -82,6 +92,9 @@ try {
     label,
     repeats: config.repeats,
     ...(config.tags ? { tags: config.tags } : {}),
+    ...(config.first ? { first: config.first } : {}),
+    ...(config.failFast ? { failFast: true } : {}),
+    ...(config.maxFailures !== undefined ? { maxFailures: config.maxFailures } : {}),
     // Failures include what the model actually said, so a live run can be judged
     // (model mistake vs grader mistake) without waiting for the final report.
     onResult: (r) =>

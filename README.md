@@ -335,6 +335,8 @@ console.log(formatReport(report))   // pass rate, p50/p90 latency, TTFT, tokens,
 await evalRetrieval(ai.knowledge!, [{ query: 'guest wifi', relevant: ['wifi-doc'] }], { k: 5 })  // recall, MRR, nDCG
 ```
 
+While iterating, `runEval(ai, cases, { failFast: true })` stops at the first failing run. `{ maxFailures: n }` stops once more than `n` runs fail, and `{ first: [...names] }` runs the named cases (for example, last run's failures) first. A report that stopped early carries `report.stopped`.
+
 Multi-turn cases grade every turn (`turns: [{ input, expect }, …]`). The report adds later-turn metrics, where conversation history matters: pass rate, time to first token, prefill tokens, prompt size and KV reuse.
 
 The playground's `eval.html` runs two suites:

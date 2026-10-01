@@ -9,7 +9,7 @@
  * Writes reports/<date>-<label>.json and prints a summary per config.
  */
 import { execSync, spawn } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
@@ -50,6 +50,29 @@ let failed = false
 // capped at 4 minutes, and the longest case has 4 turns: 30 minutes of silence means something is stuck).
 const STALL_MS = Number(process.env.EVAL_STALL_MIN ?? 30) * 60_000
 const ATTEMPTS = 3
+
+/**
+ * `failedIn=<report>` → run only the cases that failed in that report;
+ * `firstFrom=<report>` → run those cases first. Reports are read from disk
+ * here and passed to the page as case names.
+ */
+function expandReportParams(qs) {
+  const params = new URLSearchParams(qs)
+  const failedNames = (file) => {
+    const report = JSON.parse(readFileSync(file.startsWith('/') ? file : join(root, file), 'utf8'))
+    return [...new Set(report.results.filter((r) => !r.passed).map((r) => r.name))]
+  }
+  if (params.has('failedIn')) {
+    params.set('cases', failedNames(params.get('failedIn')).join('|'))
+    params.delete('failedIn')
+  }
+  if (params.has('firstFrom')) {
+    params.set('first', failedNames(params.get('firstFrom')).join('|'))
+    params.delete('firstFrom')
+  }
+  return params.toString()
+}
+configs.splice(0, configs.length, ...configs.map(expandReportParams))
 
 for (const qs of configs) {
   for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {

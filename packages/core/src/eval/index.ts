@@ -130,6 +130,8 @@ export interface EvalReport {
   consistency: { allRepeats: RateWithInterval; anyRepeat: RateWithInterval; repeats: number }
   byTag: ({ tag: string } & RateWithInterval)[]
   results: CaseResult[]
+  /** Set when failFast/maxFailures ended the run early: rates cover only the runs made. */
+  stopped?: { reason: string; ranRuns: number; plannedRuns: number }
   byCase: { name: string; tags: string[]; passRate: number; passed: number; runs: number; meanMs: number; failures: string[] }[]
   latency: { meanMs: number; p50Ms: number; p90Ms: number; ttftP50Ms: number | undefined }
   tokens: { meanOutput: number; meanPrefill: number }
@@ -161,6 +163,18 @@ export interface EvalOptions {
   turnTimeoutMs?: number
   /** Only run cases carrying at least one of these tags. */
   tags?: string[]
+  /**
+   * Stop at the first failing run. For checking a fix on cases that must
+   * pass: a wrong fix costs one run, not a whole suite.
+   */
+  failFast?: boolean
+  /**
+   * Stop once more runs than this have failed. For regression guards: set it
+   * to a baseline's failure count plus a small allowance.
+   */
+  maxFailures?: number
+  /** Case names to run first (e.g. last run's failures), so a regression shows up early. */
+  first?: string[]
 }
 
 /**
@@ -171,16 +185,32 @@ export interface EvalOptions {
 export async function runEval(ai: Enclave, cases: EvalCase[], options: EvalOptions = {}): Promise<EvalReport> {
   const repeats = options.repeats ?? 1
   const results: CaseResult[] = []
-  const selected = options.tags?.length ? cases.filter((c) => c.tags?.some((t) => options.tags!.includes(t))) : cases
-  for (const testCase of selected) {
+  const tagged = options.tags?.length ? cases.filter((c) => c.tags?.some((t) => options.tags!.includes(t))) : cases
+  const priority = new Map(options.first?.map((name, i) => [name, i]))
+  // Stable sort: listed cases first (in the given order), the rest as defined.
+  const selected = [...tagged].sort((a, b) => (priority.get(a.name) ?? Infinity) - (priority.get(b.name) ?? Infinity))
+  let failures = 0
+  let stopped: string | undefined
+  run: for (const testCase of selected) {
     for (let repeat = 0; repeat < repeats; repeat++) {
       options.signal?.throwIfAborted()
       const result = await runCase(ai, testCase, repeat, options)
       results.push(result)
       options.onResult?.(result)
+      if (!result.passed) failures++
+      if (!result.passed && options.failFast) {
+        stopped = `fail-fast: ${result.name} #${result.repeat}`
+        break run
+      }
+      if (options.maxFailures !== undefined && failures > options.maxFailures) {
+        stopped = `more than ${options.maxFailures} failing runs`
+        break run
+      }
     }
   }
-  return summarize(options.label, results, repeats)
+  const report = summarize(options.label, results, repeats)
+  if (stopped) report.stopped = { reason: stopped, ranRuns: results.length, plannedRuns: selected.length * repeats }
+  return report
 }
 
 function turnsOf(testCase: EvalCase): EvalTurn[] {
@@ -386,6 +416,7 @@ export function formatReport(report: EvalReport): string {
   const pct = (x: number) => `${Math.round(x * 100)}%`
   const ci = (r: RateWithInterval) => `${pct(r.rate)} [${pct(r.low)}–${pct(r.high)}]`
   const lines = [
+    ...(report.stopped ? [`STOPPED EARLY (${report.stopped.reason}) after ${report.stopped.ranRuns} of ${report.stopped.plannedRuns} runs`] : []),
     `${report.label ?? 'eval'}: ${ci(report.overall)} of ${report.overall.total} runs passed` +
       (report.consistency.repeats > 1 ? ` · ${ci(report.consistency.allRepeats)} of cases passed all ${report.consistency.repeats} repeats` : ''),
     `  latency p50 ${(report.latency.p50Ms / 1000).toFixed(1)}s · p90 ${(report.latency.p90Ms / 1000).toFixed(1)}s` +

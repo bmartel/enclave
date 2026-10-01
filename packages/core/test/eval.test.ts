@@ -114,3 +114,31 @@ describe('multi-turn evals', () => {
     expect(formatReport(report)).toContain('later turns (2): 50% passed')
   })
 })
+
+describe('fast-fail runs', () => {
+  // A model that answers "pass" or "fail" from a script, one entry per run.
+  const scripted = (answers: string[]) => mockModel(answers)
+  const cases = ['a', 'b', 'c', 'd'].map((name) => ({ name, input: name, expect: { answer: 'pass' } }))
+
+  it('failFast stops at the first failing run and marks the report', async () => {
+    const ai = await createEnclave({ db, model: scripted(['pass', 'fail', 'pass', 'pass']) })
+    const report = await runEval(ai, cases, { failFast: true })
+    expect(report.results.map((r) => r.name)).toEqual(['a', 'b'])
+    expect(report.stopped).toMatchObject({ reason: 'fail-fast: b #0', ranRuns: 2, plannedRuns: 4 })
+    expect(formatReport(report)).toMatch(/^STOPPED EARLY/)
+  })
+
+  it('maxFailures stops once failures exceed the budget', async () => {
+    const ai = await createEnclave({ db, model: scripted(['fail', 'pass', 'fail', 'pass']) })
+    const report = await runEval(ai, cases, { maxFailures: 1 })
+    expect(report.results.map((r) => r.name)).toEqual(['a', 'b', 'c'])
+    expect(report.stopped?.reason).toBe('more than 1 failing runs')
+  })
+
+  it('runs listed cases first, then the rest in order', async () => {
+    const ai = await createEnclave({ db, model: scripted(['pass', 'pass', 'pass', 'pass']) })
+    const report = await runEval(ai, cases, { first: ['c', 'a'] })
+    expect(report.results.map((r) => r.name)).toEqual(['c', 'a', 'b', 'd'])
+    expect(report.stopped).toBeUndefined()
+  })
+})

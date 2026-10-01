@@ -139,6 +139,21 @@ pnpm --filter @enclave/evals eval "model=qwen3-8b&label=8b" "model=qwen3-1.7b&la
 pnpm --filter @enclave/evals compare reports/a.json reports/b.json   # exits 1 on significant regression
 ```
 
+### Fast iteration: target, then guard
+
+A full run (65 cases × 3 repeats) takes 1–3.5 hours, depending on the model. To work on specific failures, use two cheaper loops:
+
+```sh
+# 1. Target loop: only last run's failures, stopping at the first failure (minutes)
+pnpm --filter @enclave/evals eval "repeats=3&failedIn=reports/<last>.json&failFast=1&label=try"
+
+# 2. Regression guard, once the fix works: everything at 1 repeat, previous
+#    failures first, abort once failures exceed the baseline's plus a margin
+pnpm --filter @enclave/evals eval "repeats=1&firstFrom=reports/<last>.json&maxFailures=8&label=guard"
+```
+
+A run that stops early says so in its report (`STOPPED EARLY …`), and its rates cover only the runs it made. Run the full 3-repeat suite only to publish a number.
+
 Runner parameters:
 
 | Parameter | Values |
@@ -154,6 +169,10 @@ Runner parameters:
 | `tags` | comma-separated tags to run |
 | `only` | substring of case names to run |
 | `label` | name for the report |
+| `failedIn` | a report file: run only the cases that failed in it |
+| `firstFrom` | a report file: run the cases that failed in it first |
+| `failFast` | `1`: stop at the first failing run |
+| `maxFailures` | stop once more runs than this have failed |
 
 While a run is going, the log prints every completed run (`✓`/`✗`, with the model's answer on failures). For a summary (progress bar, ETA, pass rate per suite, recent failures) run this from another terminal:
 
