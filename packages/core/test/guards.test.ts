@@ -320,10 +320,17 @@ describe('schema sample values', () => {
     const { sqlSkill } = await import('../src/skills/index.js')
     await db.exec(`create table products (id int primary key, name text not null, sku text, email text);
       insert into products values (1, 'Fleet Console', 'A1', 'a@x.example'), (2, 'X100 Scanner', 'A2', 'b@x.example');
+      create table order_items (id int primary key, product_id int references products(id));
+      create table tickets (id int primary key, title text, status text);
+      insert into tickets values (1, 'Printer jam', 'open'), (2, 'Scanner firmware fails', 'open'), (3, 'Renew plan', 'closed'), (4, 'Invoice change', 'closed');
       create table events (id int primary key, label text);
       insert into events select g, 'event ' || g from generate_series(1, 40) g;`)
     const context = (await sqlSkill().context!({ db, knowledge: undefined, embedder: undefined, threadId: 't', messages: [] }))!
-    expect(context).toMatch(/name text not null, -- values: 'Fleet Console', 'X100 Scanner'/)
+    // products is referenced by order_items: a lookup table, so its names are listed.
+    expect(context).toMatch(/name text not null, -- values: 'Fleet Console' \(id 1\), 'X100 Scanner' \(id 2\)/)
+    // tickets: titles are record-level free text (unique, nothing references them); status repeats.
+    expect(context).not.toContain('Printer jam')
+    expect(context).toMatch(/status text, -- values: '(open|closed)', '(open|closed)'/)
     expect(context).not.toContain('a@x.example') // sensitive column name
     expect(context).not.toContain('event 1') // 40 distinct values: too many
     const off = (await sqlSkill({ sampleValues: 0 }).context!({ db, knowledge: undefined, embedder: undefined, threadId: 't', messages: [] }))!

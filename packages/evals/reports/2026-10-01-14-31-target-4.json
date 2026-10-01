@@ -1,0 +1,1245 @@
+{
+  "label": "target-4",
+  "passRate": 0.9230769230769231,
+  "overall": {
+    "passed": 12,
+    "total": 13,
+    "rate": 0.9230769230769231,
+    "low": 0.6668546607175265,
+    "high": 0.9862899336203037
+  },
+  "consistency": {
+    "allRepeats": {
+      "passed": 4,
+      "total": 5,
+      "rate": 0.8,
+      "low": 0.3755282641185388,
+      "high": 0.9637768390302125
+    },
+    "anyRepeat": {
+      "passed": 4,
+      "total": 5,
+      "rate": 0.8,
+      "low": 0.3755282641185388,
+      "high": 0.9637768390302125
+    },
+    "repeats": 3
+  },
+  "byTag": [
+    {
+      "tag": "arguments",
+      "passed": 6,
+      "total": 6,
+      "rate": 1,
+      "low": 0.6096569663469354,
+      "high": 0.9999999999999999
+    },
+    {
+      "tag": "clarification",
+      "passed": 3,
+      "total": 3,
+      "rate": 1,
+      "low": 0.43849391955098227,
+      "high": 1
+    },
+    {
+      "tag": "disambiguation",
+      "passed": 3,
+      "total": 3,
+      "rate": 1,
+      "low": 0.43849391955098227,
+      "high": 1
+    },
+    {
+      "tag": "join",
+      "passed": 0,
+      "total": 1,
+      "rate": 0,
+      "low": 0,
+      "high": 0.7934567085261071
+    },
+    {
+      "tag": "multi-step",
+      "passed": 3,
+      "total": 3,
+      "rate": 1,
+      "low": 0.43849391955098227,
+      "high": 1
+    },
+    {
+      "tag": "recovery",
+      "passed": 0,
+      "total": 1,
+      "rate": 0,
+      "low": 0,
+      "high": 0.7934567085261071
+    },
+    {
+      "tag": "skill",
+      "passed": 12,
+      "total": 12,
+      "rate": 1,
+      "low": 0.7574992425007574,
+      "high": 1
+    },
+    {
+      "tag": "sql",
+      "passed": 0,
+      "total": 1,
+      "rate": 0,
+      "low": 0,
+      "high": 0.7934567085261071
+    }
+  ],
+  "results": [
+    {
+      "name": "crm: create ticket via name lookup",
+      "tags": [
+        "skill",
+        "arguments"
+      ],
+      "repeat": 0,
+      "passed": true,
+      "failures": [],
+      "text": "The ticket for Grace Hopper has been created. Here are the details:\n\n- **Contact**: Grace Hopper (Initech)\n- **Ticket ID**: 5\n- **Title**: Scanner not charging\n- **Priority**: Normal\n- **Due Date**: 2026-10-10\n- **Status**: Open\n\nLet me know if you need further assistance!",
+      "calls": [
+        {
+          "name": "find_contacts",
+          "input": {
+            "query": "Grace Hopper"
+          }
+        },
+        {
+          "name": "create_ticket",
+          "input": {
+            "contact_id": 2,
+            "title": "Scanner not charging",
+            "priority": "normal",
+            "due_date": "2026-10-10"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 3,
+      "durationMs": 46484,
+      "timeToFirstTokenMs": 8226,
+      "prefillTokens": 3042,
+      "outputTokens": 496,
+      "kvReuseRate": 0.6666666666666666,
+      "turns": [
+        {
+          "index": 0,
+          "input": "Open a ticket for Grace Hopper: her scanner won't charge. Normal priority, due October 10, 2026.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The ticket for Grace Hopper has been created. Here are the details:\n\n- **Contact**: Grace Hopper (Initech)\n- **Ticket ID**: 5\n- **Title**: Scanner not charging\n- **Priority**: Normal\n- **Due Date**: 2026-10-10\n- **Status**: Open\n\nLet me know if you need further assistance!",
+          "calls": [
+            {
+              "name": "find_contacts",
+              "input": {
+                "query": "Grace Hopper"
+              }
+            },
+            {
+              "name": "create_ticket",
+              "input": {
+                "contact_id": 2,
+                "title": "Scanner not charging",
+                "priority": "normal",
+                "due_date": "2026-10-10"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 3,
+          "durationMs": 46484,
+          "timeToFirstTokenMs": 8226,
+          "prefillTokens": 3042,
+          "outputTokens": 496,
+          "promptChars": 13004,
+          "compacted": false,
+          "kvReuseRate": 0.6666666666666666,
+          "reasoningChars": 1372
+        }
+      ]
+    },
+    {
+      "name": "crm: create ticket via name lookup",
+      "tags": [
+        "skill",
+        "arguments"
+      ],
+      "repeat": 1,
+      "passed": true,
+      "failures": [],
+      "text": "I have opened a ticket for Grace Hopper (Initech) regarding the scanner not charging. The ticket is marked as \"open\" and is due on 2026-10-10. Let me know if you need any further details!",
+      "calls": [
+        {
+          "name": "find_contacts",
+          "input": {
+            "query": "Grace Hopper"
+          }
+        },
+        {
+          "name": "create_ticket",
+          "input": {
+            "contact_id": 2,
+            "title": "Scanner not charging",
+            "priority": "normal",
+            "due_date": "2026-10-10"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 2,
+      "durationMs": 35297,
+      "timeToFirstTokenMs": 8131,
+      "prefillTokens": 3031,
+      "outputTokens": 360,
+      "kvReuseRate": 0.5,
+      "turns": [
+        {
+          "index": 0,
+          "input": "Open a ticket for Grace Hopper: her scanner won't charge. Normal priority, due October 10, 2026.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "I have opened a ticket for Grace Hopper (Initech) regarding the scanner not charging. The ticket is marked as \"open\" and is due on 2026-10-10. Let me know if you need any further details!",
+          "calls": [
+            {
+              "name": "find_contacts",
+              "input": {
+                "query": "Grace Hopper"
+              }
+            },
+            {
+              "name": "create_ticket",
+              "input": {
+                "contact_id": 2,
+                "title": "Scanner not charging",
+                "priority": "normal",
+                "due_date": "2026-10-10"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 35297,
+          "timeToFirstTokenMs": 8131,
+          "prefillTokens": 3031,
+          "outputTokens": 360,
+          "promptChars": 12534,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 942
+        }
+      ]
+    },
+    {
+      "name": "crm: create ticket via name lookup",
+      "tags": [
+        "skill",
+        "arguments"
+      ],
+      "repeat": 2,
+      "passed": true,
+      "failures": [],
+      "text": "The support ticket for Grace Hopper has been created successfully. Here are the details:\n\n- **Ticket ID**: 5  \n- **Status**: Open  \n- **Priority**: Normal  \n- **Due Date**: 2026-10-10  \n\nLet me know if you need further assistance!",
+      "calls": [
+        {
+          "name": "create_ticket",
+          "input": {
+            "contact_id": 2,
+            "title": "Scanner not charging",
+            "priority": "normal",
+            "due_date": "2026-10-10"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 2,
+      "durationMs": 47468,
+      "timeToFirstTokenMs": 8191,
+      "prefillTokens": 3000,
+      "outputTokens": 514,
+      "kvReuseRate": 0.5,
+      "turns": [
+        {
+          "index": 0,
+          "input": "Open a ticket for Grace Hopper: her scanner won't charge. Normal priority, due October 10, 2026.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The support ticket for Grace Hopper has been created successfully. Here are the details:\n\n- **Ticket ID**: 5  \n- **Status**: Open  \n- **Priority**: Normal  \n- **Due Date**: 2026-10-10  \n\nLet me know if you need further assistance!",
+          "calls": [
+            {
+              "name": "create_ticket",
+              "input": {
+                "contact_id": 2,
+                "title": "Scanner not charging",
+                "priority": "normal",
+                "due_date": "2026-10-10"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 47468,
+          "timeToFirstTokenMs": 8191,
+          "prefillTokens": 3000,
+          "outputTokens": 514,
+          "promptChars": 12881,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 1498
+        }
+      ]
+    },
+    {
+      "name": "crm: map informal priority",
+      "tags": [
+        "skill",
+        "arguments"
+      ],
+      "repeat": 0,
+      "passed": true,
+      "failures": [],
+      "text": "I have logged a ticket for Maria Garcia (Globex) regarding the scanners being down in production. The ticket is marked as urgent and is due on 2026-09-29. The ticket ID is 5. Let me know if you need further details.",
+      "calls": [
+        {
+          "name": "find_contacts",
+          "input": {
+            "query": "Maria Garcia"
+          }
+        },
+        {
+          "name": "create_ticket",
+          "input": {
+            "contact_id": 7,
+            "title": "Scanners down in production",
+            "priority": "urgent",
+            "due_date": "2026-09-29"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 2,
+      "durationMs": 52645,
+      "timeToFirstTokenMs": 9186,
+      "prefillTokens": 3287,
+      "outputTokens": 532,
+      "kvReuseRate": 0.5,
+      "turns": [
+        {
+          "index": 0,
+          "input": "Maria Garcia says all their scanners are down in production. Log a ticket, it's top priority, due tomorrow.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "I have logged a ticket for Maria Garcia (Globex) regarding the scanners being down in production. The ticket is marked as urgent and is due on 2026-09-29. The ticket ID is 5. Let me know if you need further details.",
+          "calls": [
+            {
+              "name": "find_contacts",
+              "input": {
+                "query": "Maria Garcia"
+              }
+            },
+            {
+              "name": "create_ticket",
+              "input": {
+                "contact_id": 7,
+                "title": "Scanners down in production",
+                "priority": "urgent",
+                "due_date": "2026-09-29"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 52645,
+          "timeToFirstTokenMs": 9186,
+          "prefillTokens": 3287,
+          "outputTokens": 532,
+          "promptChars": 14357,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 1575
+        }
+      ]
+    },
+    {
+      "name": "crm: map informal priority",
+      "tags": [
+        "skill",
+        "arguments"
+      ],
+      "repeat": 1,
+      "passed": true,
+      "failures": [],
+      "text": "I have created a support ticket for Maria Garcia (contact ID 7) with the title \"Scanners down in production\" and priority \"urgent\", due by tomorrow (2026-09-29). The ticket is currently open. Let me know if you need any further details!",
+      "calls": [
+        {
+          "name": "find_contacts",
+          "input": {
+            "query": "Maria Garcia"
+          }
+        },
+        {
+          "name": "create_ticket",
+          "input": {
+            "contact_id": 7,
+            "title": "Scanners down in production",
+            "priority": "urgent",
+            "due_date": "2026-09-29"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 3,
+      "durationMs": 35657,
+      "timeToFirstTokenMs": 9148,
+      "prefillTokens": 3298,
+      "outputTokens": 326,
+      "kvReuseRate": 0.6666666666666666,
+      "turns": [
+        {
+          "index": 0,
+          "input": "Maria Garcia says all their scanners are down in production. Log a ticket, it's top priority, due tomorrow.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "I have created a support ticket for Maria Garcia (contact ID 7) with the title \"Scanners down in production\" and priority \"urgent\", due by tomorrow (2026-09-29). The ticket is currently open. Let me know if you need any further details!",
+          "calls": [
+            {
+              "name": "find_contacts",
+              "input": {
+                "query": "Maria Garcia"
+              }
+            },
+            {
+              "name": "create_ticket",
+              "input": {
+                "contact_id": 7,
+                "title": "Scanners down in production",
+                "priority": "urgent",
+                "due_date": "2026-09-29"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 3,
+          "durationMs": 35657,
+          "timeToFirstTokenMs": 9148,
+          "prefillTokens": 3298,
+          "outputTokens": 326,
+          "promptChars": 13629,
+          "compacted": false,
+          "kvReuseRate": 0.6666666666666666,
+          "reasoningChars": 807
+        }
+      ]
+    },
+    {
+      "name": "crm: map informal priority",
+      "tags": [
+        "skill",
+        "arguments"
+      ],
+      "repeat": 2,
+      "passed": true,
+      "failures": [],
+      "text": "I have created a top-priority ticket for Maria Garcia (Globex) regarding the scanner issue, with a due date of 2026-09-29. The ticket is currently open. Would you like me to check the ticket details or update the status?",
+      "calls": [
+        {
+          "name": "find_contacts",
+          "input": {
+            "query": "Maria Garcia"
+          }
+        },
+        {
+          "name": "create_ticket",
+          "input": {
+            "contact_id": 7,
+            "title": "All scanners down in production",
+            "priority": "urgent",
+            "due_date": "2026-09-29"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 2,
+      "durationMs": 42970,
+      "timeToFirstTokenMs": 9092,
+      "prefillTokens": 3287,
+      "outputTokens": 421,
+      "kvReuseRate": 0.5,
+      "turns": [
+        {
+          "index": 0,
+          "input": "Maria Garcia says all their scanners are down in production. Log a ticket, it's top priority, due tomorrow.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "I have created a top-priority ticket for Maria Garcia (Globex) regarding the scanner issue, with a due date of 2026-09-29. The ticket is currently open. Would you like me to check the ticket details or update the status?",
+          "calls": [
+            {
+              "name": "find_contacts",
+              "input": {
+                "query": "Maria Garcia"
+              }
+            },
+            {
+              "name": "create_ticket",
+              "input": {
+                "contact_id": 7,
+                "title": "All scanners down in production",
+                "priority": "urgent",
+                "due_date": "2026-09-29"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 42970,
+          "timeToFirstTokenMs": 9092,
+          "prefillTokens": 3287,
+          "outputTokens": 421,
+          "promptChars": 13989,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 1203
+        }
+      ]
+    },
+    {
+      "name": "crm: bulk action",
+      "tags": [
+        "skill",
+        "multi-step"
+      ],
+      "repeat": 0,
+      "passed": true,
+      "failures": [],
+      "text": "Three low-priority tickets have been created for the contacts at Initech regarding their annual renewal, all due on 2026-12-01. The ticket statuses are now open. Let me know if you need further assistance.",
+      "calls": [
+        {
+          "name": "find_contacts",
+          "input": {
+            "query": "Initech"
+          }
+        },
+        {
+          "name": "create_ticket",
+          "input": {
+            "contact_id": 1,
+            "title": "Annual Renewal",
+            "priority": "low",
+            "due_date": "2026-12-01"
+          }
+        },
+        {
+          "name": "create_ticket",
+          "input": {
+            "contact_id": 2,
+            "title": "Annual Renewal",
+            "priority": "low",
+            "due_date": "2026-12-01"
+          }
+        },
+        {
+          "name": "create_ticket",
+          "input": {
+            "contact_id": 3,
+            "title": "Annual Renewal",
+            "priority": "low",
+            "due_date": "2026-12-01"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 3,
+      "durationMs": 89713,
+      "timeToFirstTokenMs": 9382,
+      "prefillTokens": 4730,
+      "outputTokens": 850,
+      "kvReuseRate": 0.6666666666666666,
+      "turns": [
+        {
+          "index": 0,
+          "input": "Create a low priority ticket for every contact at Initech about their annual renewal, due 2026-12-01.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "Three low-priority tickets have been created for the contacts at Initech regarding their annual renewal, all due on 2026-12-01. The ticket statuses are now open. Let me know if you need further assistance.",
+          "calls": [
+            {
+              "name": "find_contacts",
+              "input": {
+                "query": "Initech"
+              }
+            },
+            {
+              "name": "create_ticket",
+              "input": {
+                "contact_id": 1,
+                "title": "Annual Renewal",
+                "priority": "low",
+                "due_date": "2026-12-01"
+              }
+            },
+            {
+              "name": "create_ticket",
+              "input": {
+                "contact_id": 2,
+                "title": "Annual Renewal",
+                "priority": "low",
+                "due_date": "2026-12-01"
+              }
+            },
+            {
+              "name": "create_ticket",
+              "input": {
+                "contact_id": 3,
+                "title": "Annual Renewal",
+                "priority": "low",
+                "due_date": "2026-12-01"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 3,
+          "durationMs": 89713,
+          "timeToFirstTokenMs": 9382,
+          "prefillTokens": 4730,
+          "outputTokens": 850,
+          "promptChars": 20126,
+          "compacted": false,
+          "kvReuseRate": 0.6666666666666666,
+          "reasoningChars": 2623
+        }
+      ]
+    },
+    {
+      "name": "crm: bulk action",
+      "tags": [
+        "skill",
+        "multi-step"
+      ],
+      "repeat": 1,
+      "passed": true,
+      "failures": [],
+      "text": "Three low-priority tickets have been created for the contacts at Initech regarding their annual renewal, all due on 2026-12-01. The ticket statuses are now open. Let me know if you need further assistance.",
+      "calls": [
+        {
+          "name": "find_contacts",
+          "input": {
+            "query": "Initech"
+          }
+        },
+        {
+          "name": "create_ticket",
+          "input": {
+            "contact_id": 1,
+            "title": "Annual Renewal",
+            "priority": "low",
+            "due_date": "2026-12-01"
+          }
+        },
+        {
+          "name": "create_ticket",
+          "input": {
+            "contact_id": 2,
+            "title": "Annual Renewal",
+            "priority": "low",
+            "due_date": "2026-12-01"
+          }
+        },
+        {
+          "name": "create_ticket",
+          "input": {
+            "contact_id": 3,
+            "title": "Annual Renewal",
+            "priority": "low",
+            "due_date": "2026-12-01"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 3,
+      "durationMs": 91544,
+      "timeToFirstTokenMs": 9253,
+      "prefillTokens": 4730,
+      "outputTokens": 872,
+      "kvReuseRate": 0.6666666666666666,
+      "turns": [
+        {
+          "index": 0,
+          "input": "Create a low priority ticket for every contact at Initech about their annual renewal, due 2026-12-01.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "Three low-priority tickets have been created for the contacts at Initech regarding their annual renewal, all due on 2026-12-01. The ticket statuses are now open. Let me know if you need further assistance.",
+          "calls": [
+            {
+              "name": "find_contacts",
+              "input": {
+                "query": "Initech"
+              }
+            },
+            {
+              "name": "create_ticket",
+              "input": {
+                "contact_id": 1,
+                "title": "Annual Renewal",
+                "priority": "low",
+                "due_date": "2026-12-01"
+              }
+            },
+            {
+              "name": "create_ticket",
+              "input": {
+                "contact_id": 2,
+                "title": "Annual Renewal",
+                "priority": "low",
+                "due_date": "2026-12-01"
+              }
+            },
+            {
+              "name": "create_ticket",
+              "input": {
+                "contact_id": 3,
+                "title": "Annual Renewal",
+                "priority": "low",
+                "due_date": "2026-12-01"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 3,
+          "durationMs": 91544,
+          "timeToFirstTokenMs": 9253,
+          "prefillTokens": 4730,
+          "outputTokens": 872,
+          "promptChars": 20174,
+          "compacted": false,
+          "kvReuseRate": 0.6666666666666666,
+          "reasoningChars": 2671
+        }
+      ]
+    },
+    {
+      "name": "crm: bulk action",
+      "tags": [
+        "skill",
+        "multi-step"
+      ],
+      "repeat": 2,
+      "passed": true,
+      "failures": [],
+      "text": "Three low-priority tickets have been created for the contacts at Initech regarding their annual renewal, all due on 2026-12-01. The ticket statuses are now set to \"open\".",
+      "calls": [
+        {
+          "name": "find_contacts",
+          "input": {
+            "query": "Initech"
+          }
+        },
+        {
+          "name": "create_ticket",
+          "input": {
+            "contact_id": 1,
+            "title": "Annual Renewal",
+            "priority": "low",
+            "due_date": "2026-12-01"
+          }
+        },
+        {
+          "name": "create_ticket",
+          "input": {
+            "contact_id": 2,
+            "title": "Annual Renewal",
+            "priority": "low",
+            "due_date": "2026-12-01"
+          }
+        },
+        {
+          "name": "create_ticket",
+          "input": {
+            "contact_id": 3,
+            "title": "Annual Renewal",
+            "priority": "low",
+            "due_date": "2026-12-01"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 3,
+      "durationMs": 70810,
+      "timeToFirstTokenMs": 9160,
+      "prefillTokens": 4730,
+      "outputTokens": 647,
+      "kvReuseRate": 0.6666666666666666,
+      "turns": [
+        {
+          "index": 0,
+          "input": "Create a low priority ticket for every contact at Initech about their annual renewal, due 2026-12-01.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "Three low-priority tickets have been created for the contacts at Initech regarding their annual renewal, all due on 2026-12-01. The ticket statuses are now set to \"open\".",
+          "calls": [
+            {
+              "name": "find_contacts",
+              "input": {
+                "query": "Initech"
+              }
+            },
+            {
+              "name": "create_ticket",
+              "input": {
+                "contact_id": 1,
+                "title": "Annual Renewal",
+                "priority": "low",
+                "due_date": "2026-12-01"
+              }
+            },
+            {
+              "name": "create_ticket",
+              "input": {
+                "contact_id": 2,
+                "title": "Annual Renewal",
+                "priority": "low",
+                "due_date": "2026-12-01"
+              }
+            },
+            {
+              "name": "create_ticket",
+              "input": {
+                "contact_id": 3,
+                "title": "Annual Renewal",
+                "priority": "low",
+                "due_date": "2026-12-01"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 3,
+          "durationMs": 70810,
+          "timeToFirstTokenMs": 9160,
+          "prefillTokens": 4730,
+          "outputTokens": 647,
+          "promptChars": 19341,
+          "compacted": false,
+          "kvReuseRate": 0.6666666666666666,
+          "reasoningChars": 1838
+        }
+      ]
+    },
+    {
+      "name": "crm: ask when ambiguous",
+      "tags": [
+        "skill",
+        "disambiguation",
+        "clarification"
+      ],
+      "repeat": 0,
+      "passed": true,
+      "failures": [],
+      "text": "Which Wei Chen would you like to create the ticket for? The options are:\n1. Wei Chen from Globex (email: wei.chen@globex.example)\n2. Wei Chen from Umbrella (email: wchen@umbrella.example)",
+      "calls": [
+        {
+          "name": "find_contacts",
+          "input": {
+            "query": "Wei Chen"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 2,
+      "durationMs": 68169,
+      "timeToFirstTokenMs": 8219,
+      "prefillTokens": 3132,
+      "outputTokens": 751,
+      "kvReuseRate": 0.5,
+      "turns": [
+        {
+          "index": 0,
+          "input": "Create a normal priority ticket for Wei Chen about a billing question, due 2026-10-15.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "Which Wei Chen would you like to create the ticket for? The options are:\n1. Wei Chen from Globex (email: wei.chen@globex.example)\n2. Wei Chen from Umbrella (email: wchen@umbrella.example)",
+          "calls": [
+            {
+              "name": "find_contacts",
+              "input": {
+                "query": "Wei Chen"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 68169,
+          "timeToFirstTokenMs": 8219,
+          "prefillTokens": 3132,
+          "outputTokens": 751,
+          "promptChars": 14786,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 2894
+        }
+      ]
+    },
+    {
+      "name": "crm: ask when ambiguous",
+      "tags": [
+        "skill",
+        "disambiguation",
+        "clarification"
+      ],
+      "repeat": 1,
+      "passed": true,
+      "failures": [],
+      "text": "Which Wei Chen would you like to contact? The options are:\n1. Wei Chen from Globex (email: wei.chen@globex.example)\n2. Wei Chen from Umbrella (email: wchen@umbrella.example)",
+      "calls": [
+        {
+          "name": "find_contacts",
+          "input": {
+            "query": "Wei Chen"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 2,
+      "durationMs": 37031,
+      "timeToFirstTokenMs": 8467,
+      "prefillTokens": 3132,
+      "outputTokens": 371,
+      "kvReuseRate": 0.5,
+      "turns": [
+        {
+          "index": 0,
+          "input": "Create a normal priority ticket for Wei Chen about a billing question, due 2026-10-15.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "Which Wei Chen would you like to contact? The options are:\n1. Wei Chen from Globex (email: wei.chen@globex.example)\n2. Wei Chen from Umbrella (email: wchen@umbrella.example)",
+          "calls": [
+            {
+              "name": "find_contacts",
+              "input": {
+                "query": "Wei Chen"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 37031,
+          "timeToFirstTokenMs": 8467,
+          "prefillTokens": 3132,
+          "outputTokens": 371,
+          "promptChars": 13142,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 1250
+        }
+      ]
+    },
+    {
+      "name": "crm: ask when ambiguous",
+      "tags": [
+        "skill",
+        "disambiguation",
+        "clarification"
+      ],
+      "repeat": 2,
+      "passed": true,
+      "failures": [],
+      "text": "The user mentioned \"Wei Chen\" but did not specify the company. There are two contacts with this name: one at **Globex** (id 4) and one at **Umbrella** (id 5). Please clarify which company the user refers to.",
+      "calls": [
+        {
+          "name": "find_contacts",
+          "input": {
+            "query": "Wei Chen"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 2,
+      "durationMs": 74264,
+      "timeToFirstTokenMs": 8397,
+      "prefillTokens": 3132,
+      "outputTokens": 820,
+      "kvReuseRate": 0.5,
+      "turns": [
+        {
+          "index": 0,
+          "input": "Create a normal priority ticket for Wei Chen about a billing question, due 2026-10-15.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The user mentioned \"Wei Chen\" but did not specify the company. There are two contacts with this name: one at **Globex** (id 4) and one at **Umbrella** (id 5). Please clarify which company the user refers to.",
+          "calls": [
+            {
+              "name": "find_contacts",
+              "input": {
+                "query": "Wei Chen"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 74264,
+          "timeToFirstTokenMs": 8397,
+          "prefillTokens": 3132,
+          "outputTokens": 820,
+          "promptChars": 15017,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 3125
+        }
+      ]
+    },
+    {
+      "name": "sql: vocabulary mismatch",
+      "tags": [
+        "sql",
+        "join",
+        "recovery"
+      ],
+      "repeat": 0,
+      "passed": false,
+      "failures": [
+        "expected the answer to state 33932"
+      ],
+      "text": "The Fleet Console has generated a total revenue of $32,435.00. This amount represents the sum of all sales from the Fleet Console product, considering only orders that have been delivered or shipped.",
+      "calls": [
+        {
+          "name": "execute_sql",
+          "input": {
+            "sql": "SELECT SUM(quantity * unit_price) AS total_revenue FROM order_items WHERE product_id = 10 AND order_id IN (SELECT id FROM orders WHERE status = 'delivered' OR status = 'shipped');"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 2,
+      "durationMs": 84827,
+      "timeToFirstTokenMs": 7965,
+      "prefillTokens": 3004,
+      "outputTokens": 963,
+      "kvReuseRate": 0.5,
+      "turns": [
+        {
+          "index": 0,
+          "input": "How much revenue has the Fleet Console brought in?",
+          "graded": true,
+          "passed": false,
+          "failures": [
+            "expected the answer to state 33932"
+          ],
+          "text": "The Fleet Console has generated a total revenue of $32,435.00. This amount represents the sum of all sales from the Fleet Console product, considering only orders that have been delivered or shipped.",
+          "calls": [
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "SELECT SUM(quantity * unit_price) AS total_revenue FROM order_items WHERE product_id = 10 AND order_id IN (SELECT id FROM orders WHERE status = 'delivered' OR status = 'shipped');"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 84827,
+          "timeToFirstTokenMs": 7965,
+          "prefillTokens": 3004,
+          "outputTokens": 963,
+          "promptChars": 15092,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 3597,
+          "reasoningTail": "' is the correct field to use, not the 'price' in 'products'.\n\nTherefore, the query should use 'order_items.unit_price' multiplied by 'order_items.quantity'.\n\nI need to make sure that the 'Fleet Console' is indeed in the 'products' table. From the schema, the 'products' table has 'Fleet Console' as id 10. So, the product_id is 10.\n\nSo, the SQL should filter where products.name = 'Fleet Console' and orders.status is delivered or shipped.\n\nI should execute this query using the execute_sql function. Let me structure the SQL correctly.\n\nThe SQL query would be:\n\nSELECT SUM(quantity * unit_price) AS total_revenue\nFROM order_items\nWHERE product_id = 10\nAND order_id IN (\n    SELECT id FROM orders WHERE status IN ('delivered', 'shipped')\n);\n\nAlternatively, joining the tables might be more efficient. But since the user's database might have constraints, I need to make sure the query is correct.\n\nAlternatively, joining the tables:\n\nSELECT SUM(order_items.quantity * order_items.unit_price) AS total_revenue\nFROM order_items\nJOIN orders ON order_items.order_id = orders.id\nJOIN products ON order_items.product_id = products.id\nWHERE orders.status IN ('delivered', 'shipped') AND products.name = 'Fleet Console';\n\nThis should give the correct sum. However, I need to check if the 'products.name' is exactly 'Fleet Console' as per the schema. The schema says the 'name' for product id 10 is 'Fleet Console'.\n\nSo, the query should work. Now, I need to call the execute_sql function with this query.\n\n\n"
+        }
+      ]
+    }
+  ],
+  "byCase": [
+    {
+      "name": "crm: create ticket via name lookup",
+      "tags": [
+        "skill",
+        "arguments"
+      ],
+      "passRate": 1,
+      "passed": 3,
+      "runs": 3,
+      "meanMs": 43083,
+      "failures": []
+    },
+    {
+      "name": "crm: map informal priority",
+      "tags": [
+        "skill",
+        "arguments"
+      ],
+      "passRate": 1,
+      "passed": 3,
+      "runs": 3,
+      "meanMs": 43757,
+      "failures": []
+    },
+    {
+      "name": "crm: bulk action",
+      "tags": [
+        "skill",
+        "multi-step"
+      ],
+      "passRate": 1,
+      "passed": 3,
+      "runs": 3,
+      "meanMs": 84022,
+      "failures": []
+    },
+    {
+      "name": "crm: ask when ambiguous",
+      "tags": [
+        "skill",
+        "disambiguation",
+        "clarification"
+      ],
+      "passRate": 1,
+      "passed": 3,
+      "runs": 3,
+      "meanMs": 59821,
+      "failures": []
+    },
+    {
+      "name": "sql: vocabulary mismatch",
+      "tags": [
+        "sql",
+        "join",
+        "recovery"
+      ],
+      "passRate": 0,
+      "passed": 0,
+      "runs": 1,
+      "meanMs": 84827,
+      "failures": [
+        "expected the answer to state 33932"
+      ]
+    }
+  ],
+  "latency": {
+    "meanMs": 59760,
+    "p50Ms": 52645,
+    "p90Ms": 89713,
+    "ttftP50Ms": 8467
+  },
+  "tokens": {
+    "meanOutput": 609,
+    "meanPrefill": 3503
+  },
+  "toolErrorRate": 0,
+  "kvReuseRate": 0.5641025641025641,
+  "stopped": {
+    "reason": "fail-fast: sql: vocabulary mismatch #0",
+    "ranRuns": 13,
+    "plannedRuns": 15
+  },
+  "config": {
+    "model": "qwen3-4b",
+    "thinking": "auto",
+    "reasoningHistory": "current-turn",
+    "constrainToolCalls": true,
+    "embedding": "auto",
+    "reranker": "auto",
+    "searchMode": null,
+    "repeats": 3,
+    "only": null,
+    "cases": [
+      "crm: create ticket via name lookup",
+      "crm: map informal priority",
+      "crm: bulk action",
+      "crm: ask when ambiguous",
+      "sql: vocabulary mismatch"
+    ],
+    "first": [
+      "crm: create ticket via name lookup",
+      "crm: map informal priority",
+      "crm: bulk action",
+      "crm: ask when ambiguous"
+    ],
+    "failFast": true,
+    "ctx": 32768
+  },
+  "environment": {
+    "device": {
+      "webgpu": true,
+      "shaderF16": true,
+      "adapter": {
+        "vendor": "apple",
+        "architecture": "metal-3",
+        "description": ""
+      },
+      "maxStorageBufferMB": 4096,
+      "deviceMemoryGB": 32,
+      "mobile": false,
+      "gpuBudgetMB": 16384,
+      "crossOriginIsolated": false,
+      "storage": {
+        "quotaMB": 12928,
+        "usageMB": 2688,
+        "persisted": true
+      }
+    },
+    "plan": {
+      "llm": {
+        "preset": {
+          "id": "qwen3-4b",
+          "label": "Qwen3 4B",
+          "runtime": "webllm",
+          "model": "Qwen3-4B",
+          "params": "4B",
+          "vramMB": 3432,
+          "kvMBPer4k": 604,
+          "downloadMB": 2300,
+          "contextWindow": 16384,
+          "quality": 80,
+          "thinking": "hybrid"
+        },
+        "modelId": "Qwen3-4B-q4f16_1-MLC",
+        "contextWindow": 16384,
+        "estimatedMB": 5244
+      },
+      "embedding": {
+        "id": "embeddinggemma",
+        "label": "EmbeddingGemma 300M (best quality, 100+ languages)",
+        "model": "onnx-community/embeddinggemma-300m-ONNX",
+        "dimensions": 768,
+        "method": "sentence_embedding",
+        "queryPrefix": "task: search result | query: ",
+        "documentTemplate": "title: {title} | text: {text}",
+        "matryoshka": [
+          768,
+          512,
+          256,
+          128
+        ],
+        "dtype": {
+          "webgpu": "q4",
+          "webgpuF32": "q4",
+          "wasm": "q8"
+        },
+        "downloadMB": 197,
+        "maxTokens": 2048,
+        "languages": "multilingual",
+        "license": "gemma",
+        "searchMode": "vector",
+        "relevanceFloor": 0.35
+      }
+    },
+    "model": "webllm:Qwen3-4B-q4f16_1-MLC",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36"
+  },
+  "commit": "911362d",
+  "wallClockSec": 785
+}

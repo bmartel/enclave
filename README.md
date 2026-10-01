@@ -267,7 +267,10 @@ For small models, put guidance in tool results, where the model is looking when 
 - **`sqlSkill({ readOnly, approveWrites, maxRows })`**
   - The database.build capability: live schema in context, plus `describe_schema` and `execute_sql`.
   - Writes need approval by default.
-  - **Sample values.** Text columns with up to 12 distinct values list them (`sampleValues`). The model can then tell that "the Fleet Console" is a product name. Columns that look sensitive (email, phone, password, token, key) are never sampled.
+  - **Sample values.** Lookup-style text columns with up to 12 distinct values list them (`sampleValues`). The model can then tell that "the Fleet Console" is a product name.
+    - Sampled: tables other tables reference (products, contacts), shown with their ids as `'Fleet Console' (id 10)`, and columns whose values repeat (status, country).
+    - Not sampled: record-level free text such as ticket titles, and columns that look sensitive (email, phone, password, token, key).
+    - Two failure modes shaped this. Listed ticket titles made the in-browser model reuse an existing ticket's id. Names listed without ids made it read the list position as the id.
   - Table and column comments (`COMMENT ON`) are shown as SQL comments. They are the place to document business rules the model can't guess, such as "revenue excludes cancelled orders". Without that rule, Qwen3 4B wrote correct SQL but computed the wrong revenue.
   - The internal `enclave` schema is hidden from the model.
 - **`memorySkill()`**: `remember`, `recall` and `forget`, backed by the knowledge base. Recent facts are added to context. When the latest message asks to remember or forget something, a one-turn hint tells the model to call the tool. Otherwise small models reply "I'll remember that" and store nothing. `remember({ fact, replaces })` updates a fact in one call. `forget` and `replaces` can only delete memories, never documents. Memories are kept out of `knowledgeSkill` searches (`exclude`, default `['memory']`), so they can't pass as documents. `remember` refuses anything that looks like a credential or card number (`looksLikeSecret`), because prompting alone didn't stop Qwen3 4B from saving a password.

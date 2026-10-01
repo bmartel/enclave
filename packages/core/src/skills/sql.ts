@@ -13,10 +13,14 @@ export interface SqlSkillOptions {
   /** Rows per result returned to the model. Default 100. */
   maxRows?: number
   /**
-   * List the values of text columns that have at most this many distinct
-   * values, so the model can map a user's words to data ("the Fleet Console"
-   * is a product name). Columns that look sensitive (email, phone, password,
-   * token, key, secret) are never sampled. Default 12; 0 disables.
+   * List the values of lookup-style text columns with at most this many
+   * distinct values, so the model can map a user's words to data ("the Fleet
+   * Console" is a product name). Sampled: columns of tables that another table
+   * references (products, categories), and columns whose values repeat
+   * (status, country). Record-level free text (ticket titles) is not: in the
+   * evals, listed ticket titles led the model to reuse an existing ticket's
+   * id. Sensitive-looking columns (email, phone, password, token, key) are
+   * never sampled. Default 12; 0 disables.
    */
   sampleValues?: number
 }
@@ -123,14 +127,46 @@ function compactRow(row: unknown): unknown {
 const SENSITIVE_COLUMN = /pass|secret|token|key|hash|email|phone|ssn|card|iban/i
 const quoteIdent = (name: string) => `"${name.replace(/"/g, '""')}"`
 
-/** Distinct values of a low-cardinality text column, or undefined when there are too many. */
-async function sampleColumn(db: Db, schema: string, table: string, column: string, max: number): Promise<string | undefined> {
+/**
+ * Distinct values of a low-cardinality lookup column, or undefined when there
+ * are too many, or when the column holds record-level free text (values don't
+ * repeat in a table nothing references).
+ */
+async function sampleColumn(
+  db: Db,
+  schema: string,
+  table: string,
+  column: string,
+  max: number,
+  referenced: boolean,
+  primaryKey: string | undefined,
+): Promise<string | undefined> {
+  const from = `${quoteIdent(schema)}.${quoteIdent(table)}`
+  // A small lookup table lists each value with its key: a bare list invites a
+  // small model to read the position as the id (it did, picking the wrong
+  // contact when names were listed without ids).
+  if (referenced && primaryKey) {
+    const { rows } = await db
+      .query<{ id: string; v: string }>(
+        `select ${quoteIdent(primaryKey)}::text as id, ${quoteIdent(column)}::text as v from ${from} where ${quoteIdent(column)} is not null order by ${quoteIdent(primaryKey)} limit ${max + 1}`,
+      )
+      .catch(() => ({ rows: [] as { id: string; v: string }[] }))
+    if (rows.length && rows.length <= max) {
+      const values = rows.map((r) => `'${r.v.length > 40 ? `${r.v.slice(0, 40)}…` : r.v}' (${primaryKey} ${r.id})`).join(', ')
+      return `values: ${values.length > 400 ? `${values.slice(0, 400)}…` : values}`
+    }
+  }
   const { rows } = await db
-    .query<{ v: string }>(
-      `select distinct ${quoteIdent(column)}::text as v from ${quoteIdent(schema)}.${quoteIdent(table)} where ${quoteIdent(column)} is not null limit ${max + 1}`,
-    )
+    .query<{ v: string }>(`select distinct ${quoteIdent(column)}::text as v from ${from} where ${quoteIdent(column)} is not null limit ${max + 1}`)
     .catch(() => ({ rows: [] as { v: string }[] }))
   if (!rows.length || rows.length > max) return undefined
+  if (!referenced) {
+    const { rows: count } = await db
+      .query<{ n: number }>(`select count(*)::int as n from (select 1 from ${from} where ${quoteIdent(column)} is not null limit ${4 * max}) t`)
+      .catch(() => ({ rows: [{ n: 0 }] }))
+    // Categorical only: each value appears at least twice on average.
+    if ((count[0]?.n ?? 0) < 2 * rows.length) return undefined
+  }
   const values = rows.map((r) => `'${r.v.length > 40 ? `${r.v.slice(0, 40)}…` : r.v}'`).join(', ')
   return `values: ${values.length > 300 ? `${values.slice(0, 300)}…` : values}`
 }
@@ -171,6 +207,23 @@ async function describe(db: Db, schemas: string[], table?: string, sampleValues 
     [schemas, table ?? null],
   )
 
+  // Tables another table points at are lookups (products, customers, categories).
+  const { rows: refs } = await db.query<{ table_schema: string; table_name: string }>(
+    `select distinct n.nspname as table_schema, c.relname as table_name
+     from pg_constraint k join pg_class c on c.oid = k.confrelid join pg_namespace n on n.oid = c.relnamespace
+     where k.contype = 'f' and n.nspname = any($1)`,
+    [schemas],
+  )
+  const referenced = new Set(refs.map((r) => `${r.table_schema}.${r.table_name}`))
+  const { rows: pks } = await db.query<{ table_schema: string; table_name: string; column_name: string }>(
+    `select n.nspname as table_schema, c.relname as table_name, a.attname as column_name
+     from pg_index i join pg_class c on c.oid = i.indrelid join pg_namespace n on n.oid = c.relnamespace
+       join pg_attribute a on a.attrelid = c.oid and a.attnum = i.indkey[0]
+     where i.indisprimary and i.indnatts = 1 and n.nspname = any($1)`,
+    [schemas],
+  )
+  const primaryKeys = new Map(pks.map((p) => [`${p.table_schema}.${p.table_name}`, p.column_name]))
+
   // COMMENT ON is where apps document business rules ("revenue excludes
   // cancelled orders"); the model sees them as SQL comments.
   const tables = new Map<string, { def: string; comment?: string }[]>()
@@ -183,7 +236,8 @@ async function describe(db: Db, schemas: string[], table?: string, sampleValues 
     if (c.table_comment) notes.set(key, oneLine(c.table_comment))
     const comments = c.column_comment ? [oneLine(c.column_comment)] : []
     if (sampleValues > 0 && /^(text|character varying|varchar|character|citext)/.test(c.type) && !SENSITIVE_COLUMN.test(c.column_name)) {
-      const sample = await sampleColumn(db, c.table_schema, c.table_name, c.column_name, sampleValues)
+      const key = `${c.table_schema}.${c.table_name}`
+      const sample = await sampleColumn(db, c.table_schema, c.table_name, c.column_name, sampleValues, referenced.has(key), primaryKeys.get(key))
       if (sample) comments.push(sample)
     }
     const line = { def: parts.join(' '), ...(comments.length ? { comment: comments.join('; ') } : {}) }

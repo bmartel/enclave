@@ -1,0 +1,342 @@
+{
+  "label": "target-5",
+  "passRate": 0.6666666666666666,
+  "overall": {
+    "passed": 2,
+    "total": 3,
+    "rate": 0.6666666666666666,
+    "low": 0.2076549551264879,
+    "high": 0.9385096847238394
+  },
+  "consistency": {
+    "allRepeats": {
+      "passed": 0,
+      "total": 1,
+      "rate": 0,
+      "low": 0,
+      "high": 0.7934567085261071
+    },
+    "anyRepeat": {
+      "passed": 1,
+      "total": 1,
+      "rate": 1,
+      "low": 0.20654329147389294,
+      "high": 1
+    },
+    "repeats": 3
+  },
+  "byTag": [
+    {
+      "tag": "join",
+      "passed": 2,
+      "total": 3,
+      "rate": 0.6666666666666666,
+      "low": 0.2076549551264879,
+      "high": 0.9385096847238394
+    },
+    {
+      "tag": "recovery",
+      "passed": 2,
+      "total": 3,
+      "rate": 0.6666666666666666,
+      "low": 0.2076549551264879,
+      "high": 0.9385096847238394
+    },
+    {
+      "tag": "sql",
+      "passed": 2,
+      "total": 3,
+      "rate": 0.6666666666666666,
+      "low": 0.2076549551264879,
+      "high": 0.9385096847238394
+    }
+  ],
+  "results": [
+    {
+      "name": "sql: vocabulary mismatch",
+      "tags": [
+        "sql",
+        "join",
+        "recovery"
+      ],
+      "repeat": 0,
+      "passed": true,
+      "failures": [],
+      "text": "The Fleet Console has generated a total revenue of $33,932.00. This amount represents the sum of all sales from the Fleet Console product, excluding any cancelled orders. \n\n$$\n\\text{Total Revenue} = \\$33,932.00\n$$",
+      "calls": [
+        {
+          "name": "execute_sql",
+          "input": {
+            "sql": "SELECT SUM(quantity * unit_price) AS total_revenue FROM order_items JOIN orders ON order_items.order_id = orders.id WHERE order_items.product_id = 10 AND orders.status != 'cancelled';"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 2,
+      "durationMs": 73352,
+      "timeToFirstTokenMs": 8096,
+      "prefillTokens": 3004,
+      "outputTokens": 832,
+      "kvReuseRate": 0.5,
+      "turns": [
+        {
+          "index": 0,
+          "input": "How much revenue has the Fleet Console brought in?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The Fleet Console has generated a total revenue of $33,932.00. This amount represents the sum of all sales from the Fleet Console product, excluding any cancelled orders. \n\n$$\n\\text{Total Revenue} = \\$33,932.00\n$$",
+          "calls": [
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "SELECT SUM(quantity * unit_price) AS total_revenue FROM order_items JOIN orders ON order_items.order_id = orders.id WHERE order_items.product_id = 10 AND orders.status != 'cancelled';"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 73352,
+          "timeToFirstTokenMs": 8096,
+          "prefillTokens": 3004,
+          "outputTokens": 832,
+          "promptChars": 14571,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 3072
+        }
+      ]
+    },
+    {
+      "name": "sql: vocabulary mismatch",
+      "tags": [
+        "sql",
+        "join",
+        "recovery"
+      ],
+      "repeat": 1,
+      "passed": false,
+      "failures": [
+        "expected the answer to state 33932"
+      ],
+      "text": "The Fleet Console has generated a total revenue of $17,465.00. This amount is calculated from the order items where the product is the Fleet Console (product_id 10) and the order status is 'delivered'.",
+      "calls": [
+        {
+          "name": "execute_sql",
+          "input": {
+            "sql": "SELECT SUM(order_items.quantity * order_items.unit_price) AS total_revenue FROM order_items JOIN orders ON order_items.order_id = orders.id WHERE order_items.product_id = 10 AND orders.status = 'delivered';"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 2,
+      "durationMs": 59979,
+      "timeToFirstTokenMs": 7957,
+      "prefillTokens": 3004,
+      "outputTokens": 675,
+      "kvReuseRate": 0.5,
+      "turns": [
+        {
+          "index": 0,
+          "input": "How much revenue has the Fleet Console brought in?",
+          "graded": true,
+          "passed": false,
+          "failures": [
+            "expected the answer to state 33932"
+          ],
+          "text": "The Fleet Console has generated a total revenue of $17,465.00. This amount is calculated from the order items where the product is the Fleet Console (product_id 10) and the order status is 'delivered'.",
+          "calls": [
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "SELECT SUM(order_items.quantity * order_items.unit_price) AS total_revenue FROM order_items JOIN orders ON order_items.order_id = orders.id WHERE order_items.product_id = 10 AND orders.status = 'delivered';"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 59979,
+          "timeToFirstTokenMs": 7957,
+          "prefillTokens": 3004,
+          "outputTokens": 675,
+          "promptChars": 13910,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 2388,
+          "reasoningTail": " by unit_price for each relevant order_item.\n\nWait, the 'orders' table has a 'status' column, and the 'order_items' table has 'quantity' and 'unit_price'. The 'orders' table's status must be 'delivered' for the revenue to count, since cancelled orders aren't included. \n\nSo, I need to join the 'orders' table with 'order_items' on order_id, filter where the product is 'Fleet Console' (product_id 10), and the order status is 'delivered'. Then sum up (quantity * unit_price) for all those entries.\n\nBut how do I get the product_id for 'Fleet Console'? Looking at the products table, the 'name' column has 'Fleet Console' with id 10. So, in the order_items table, the product_id should be 10.\n\nSo the SQL query would be something like:\n\nSELECT SUM(order_items.quantity * order_items.unit_price) AS total_revenue\nFROM order_items\nJOIN orders ON order_items.order_id = orders.id\nWHERE order_items.product_id = 10\nAND orders.status = 'delivered';\n\nBut I need to make sure that the 'orders' table's status is 'delivered' and that the product is indeed 'Fleet Console' (product_id 10). Also, check if there are any other tables or constraints I might have missed. The 'orders' table's status is checked against 'delivered', 'cancelled', etc., so 'delivered' is valid.\n\nTherefore, the correct approach is to execute this SQL query using the execute_sql function. The answer should be the sum of quantity multiplied by unit_price for all order_items of product_id 10 where the order status is 'delivered'.\n\n\n"
+        }
+      ]
+    },
+    {
+      "name": "sql: vocabulary mismatch",
+      "tags": [
+        "sql",
+        "join",
+        "recovery"
+      ],
+      "repeat": 2,
+      "passed": true,
+      "failures": [],
+      "text": "The Fleet Console has generated a total revenue of $33,932.00. \n\nThis amount is calculated by summing the product of quantity and unit price for all order items of the Fleet Console, considering only orders that are not cancelled.",
+      "calls": [
+        {
+          "name": "execute_sql",
+          "input": {
+            "sql": "SELECT SUM(quantity * unit_price) AS total_revenue FROM order_items JOIN orders ON order_items.order_id = orders.id WHERE orders.status != 'cancelled' AND order_items.product_id = 10;"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 2,
+      "durationMs": 112243,
+      "timeToFirstTokenMs": 7958,
+      "prefillTokens": 3004,
+      "outputTokens": 1267,
+      "kvReuseRate": 0.5,
+      "turns": [
+        {
+          "index": 0,
+          "input": "How much revenue has the Fleet Console brought in?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The Fleet Console has generated a total revenue of $33,932.00. \n\nThis amount is calculated by summing the product of quantity and unit price for all order items of the Fleet Console, considering only orders that are not cancelled.",
+          "calls": [
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "SELECT SUM(quantity * unit_price) AS total_revenue FROM order_items JOIN orders ON order_items.order_id = orders.id WHERE orders.status != 'cancelled' AND order_items.product_id = 10;"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 112243,
+          "timeToFirstTokenMs": 7958,
+          "prefillTokens": 3004,
+          "outputTokens": 1267,
+          "promptChars": 16587,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 5088
+        }
+      ]
+    }
+  ],
+  "byCase": [
+    {
+      "name": "sql: vocabulary mismatch",
+      "tags": [
+        "sql",
+        "join",
+        "recovery"
+      ],
+      "passRate": 0.6666666666666666,
+      "passed": 2,
+      "runs": 3,
+      "meanMs": 81858,
+      "failures": [
+        "expected the answer to state 33932"
+      ]
+    }
+  ],
+  "latency": {
+    "meanMs": 81858,
+    "p50Ms": 73352,
+    "p90Ms": 112243,
+    "ttftP50Ms": 7958
+  },
+  "tokens": {
+    "meanOutput": 925,
+    "meanPrefill": 3004
+  },
+  "toolErrorRate": 0,
+  "kvReuseRate": 0.5,
+  "config": {
+    "model": "qwen3-4b",
+    "thinking": "auto",
+    "reasoningHistory": "current-turn",
+    "constrainToolCalls": true,
+    "embedding": "auto",
+    "reranker": "auto",
+    "searchMode": null,
+    "repeats": 3,
+    "only": null,
+    "cases": [
+      "sql: vocabulary mismatch"
+    ],
+    "failFast": false,
+    "ctx": 32768
+  },
+  "environment": {
+    "device": {
+      "webgpu": true,
+      "shaderF16": true,
+      "adapter": {
+        "vendor": "apple",
+        "architecture": "metal-3",
+        "description": ""
+      },
+      "maxStorageBufferMB": 4096,
+      "deviceMemoryGB": 32,
+      "mobile": false,
+      "gpuBudgetMB": 16384,
+      "crossOriginIsolated": false,
+      "storage": {
+        "quotaMB": 12928,
+        "usageMB": 2688,
+        "persisted": true
+      }
+    },
+    "plan": {
+      "llm": {
+        "preset": {
+          "id": "qwen3-4b",
+          "label": "Qwen3 4B",
+          "runtime": "webllm",
+          "model": "Qwen3-4B",
+          "params": "4B",
+          "vramMB": 3432,
+          "kvMBPer4k": 604,
+          "downloadMB": 2300,
+          "contextWindow": 16384,
+          "quality": 80,
+          "thinking": "hybrid"
+        },
+        "modelId": "Qwen3-4B-q4f16_1-MLC",
+        "contextWindow": 16384,
+        "estimatedMB": 5244
+      },
+      "embedding": {
+        "id": "embeddinggemma",
+        "label": "EmbeddingGemma 300M (best quality, 100+ languages)",
+        "model": "onnx-community/embeddinggemma-300m-ONNX",
+        "dimensions": 768,
+        "method": "sentence_embedding",
+        "queryPrefix": "task: search result | query: ",
+        "documentTemplate": "title: {title} | text: {text}",
+        "matryoshka": [
+          768,
+          512,
+          256,
+          128
+        ],
+        "dtype": {
+          "webgpu": "q4",
+          "webgpuF32": "q4",
+          "wasm": "q8"
+        },
+        "downloadMB": 197,
+        "maxTokens": 2048,
+        "languages": "multilingual",
+        "license": "gemma",
+        "searchMode": "vector",
+        "relevanceFloor": 0.35
+      }
+    },
+    "model": "webllm:Qwen3-4B-q4f16_1-MLC",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36"
+  },
+  "commit": "911362d",
+  "wallClockSec": 254
+}

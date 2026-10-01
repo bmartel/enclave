@@ -1,0 +1,451 @@
+{
+  "label": "target-3",
+  "passRate": 0.75,
+  "overall": {
+    "passed": 3,
+    "total": 4,
+    "rate": 0.75,
+    "low": 0.3006360524426366,
+    "high": 0.9544139373553637
+  },
+  "consistency": {
+    "allRepeats": {
+      "passed": 1,
+      "total": 2,
+      "rate": 0.5,
+      "low": 0.09452865480086614,
+      "high": 0.9054713451991339
+    },
+    "anyRepeat": {
+      "passed": 1,
+      "total": 2,
+      "rate": 0.5,
+      "low": 0.09452865480086614,
+      "high": 0.9054713451991339
+    },
+    "repeats": 3
+  },
+  "byTag": [
+    {
+      "tag": "arguments",
+      "passed": 0,
+      "total": 1,
+      "rate": 0,
+      "low": 0,
+      "high": 0.7934567085261071
+    },
+    {
+      "tag": "join",
+      "passed": 3,
+      "total": 3,
+      "rate": 1,
+      "low": 0.43849391955098227,
+      "high": 1
+    },
+    {
+      "tag": "recovery",
+      "passed": 3,
+      "total": 3,
+      "rate": 1,
+      "low": 0.43849391955098227,
+      "high": 1
+    },
+    {
+      "tag": "skill",
+      "passed": 0,
+      "total": 1,
+      "rate": 0,
+      "low": 0,
+      "high": 0.7934567085261071
+    },
+    {
+      "tag": "sql",
+      "passed": 3,
+      "total": 3,
+      "rate": 1,
+      "low": 0.43849391955098227,
+      "high": 1
+    }
+  ],
+  "results": [
+    {
+      "name": "sql: vocabulary mismatch",
+      "tags": [
+        "sql",
+        "join",
+        "recovery"
+      ],
+      "repeat": 0,
+      "passed": true,
+      "failures": [],
+      "text": "The Fleet Console has generated a total revenue of $33,932.00. \n\nThis amount represents the sum of all sales from the Fleet Console product, excluding any orders that were cancelled.",
+      "calls": [
+        {
+          "name": "execute_sql",
+          "input": {
+            "sql": "SELECT SUM(quantity * unit_price) AS total_revenue FROM order_items JOIN products ON order_items.product_id = products.id JOIN orders ON order_items.order_id = orders.id WHERE products.name = 'Fleet Console' AND orders.status != 'cancelled';"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 2,
+      "durationMs": 85455,
+      "timeToFirstTokenMs": 7309,
+      "prefillTokens": 2763,
+      "outputTokens": 1032,
+      "kvReuseRate": 0.5,
+      "turns": [
+        {
+          "index": 0,
+          "input": "How much revenue has the Fleet Console brought in?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The Fleet Console has generated a total revenue of $33,932.00. \n\nThis amount represents the sum of all sales from the Fleet Console product, excluding any orders that were cancelled.",
+          "calls": [
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "SELECT SUM(quantity * unit_price) AS total_revenue FROM order_items JOIN products ON order_items.product_id = products.id JOIN orders ON order_items.order_id = orders.id WHERE products.name = 'Fleet Console' AND orders.status != 'cancelled';"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 85455,
+          "timeToFirstTokenMs": 7309,
+          "prefillTokens": 2763,
+          "outputTokens": 1032,
+          "promptChars": 15293,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 4150
+        }
+      ]
+    },
+    {
+      "name": "sql: vocabulary mismatch",
+      "tags": [
+        "sql",
+        "join",
+        "recovery"
+      ],
+      "repeat": 1,
+      "passed": true,
+      "failures": [],
+      "text": "The Fleet Console has generated a total revenue of $33,932.00.",
+      "calls": [
+        {
+          "name": "execute_sql",
+          "input": {
+            "sql": "SELECT SUM(order_items.quantity * order_items.unit_price) AS revenue FROM order_items JOIN products ON order_items.product_id = products.id JOIN orders ON order_items.order_id = orders.id WHERE products.name = 'Fleet Console' AND orders.status != 'cancelled';"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 2,
+      "durationMs": 57609,
+      "timeToFirstTokenMs": 7139,
+      "prefillTokens": 2761,
+      "outputTokens": 693,
+      "kvReuseRate": 0.5,
+      "turns": [
+        {
+          "index": 0,
+          "input": "How much revenue has the Fleet Console brought in?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The Fleet Console has generated a total revenue of $33,932.00.",
+          "calls": [
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "SELECT SUM(order_items.quantity * order_items.unit_price) AS revenue FROM order_items JOIN products ON order_items.product_id = products.id JOIN orders ON order_items.order_id = orders.id WHERE products.name = 'Fleet Console' AND orders.status != 'cancelled';"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 57609,
+          "timeToFirstTokenMs": 7139,
+          "prefillTokens": 2761,
+          "outputTokens": 693,
+          "promptChars": 13921,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 2772
+        }
+      ]
+    },
+    {
+      "name": "sql: vocabulary mismatch",
+      "tags": [
+        "sql",
+        "join",
+        "recovery"
+      ],
+      "repeat": 2,
+      "passed": true,
+      "failures": [],
+      "text": "The Fleet Console has generated a total revenue of $33,932.00.",
+      "calls": [
+        {
+          "name": "execute_sql",
+          "input": {
+            "sql": "SELECT SUM(order_items.quantity * order_items.unit_price) AS total_revenue FROM order_items JOIN orders ON order_items.order_id = orders.id JOIN products ON order_items.product_id = products.id WHERE products.name = 'Fleet Console' AND orders.status != 'cancelled';"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 2,
+      "durationMs": 106757,
+      "timeToFirstTokenMs": 7175,
+      "prefillTokens": 2763,
+      "outputTokens": 1275,
+      "kvReuseRate": 0.5,
+      "turns": [
+        {
+          "index": 0,
+          "input": "How much revenue has the Fleet Console brought in?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The Fleet Console has generated a total revenue of $33,932.00.",
+          "calls": [
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "SELECT SUM(order_items.quantity * order_items.unit_price) AS total_revenue FROM order_items JOIN orders ON order_items.order_id = orders.id JOIN products ON order_items.product_id = products.id WHERE products.name = 'Fleet Console' AND orders.status != 'cancelled';"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 106757,
+          "timeToFirstTokenMs": 7175,
+          "prefillTokens": 2763,
+          "outputTokens": 1275,
+          "promptChars": 16411,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 5244
+        }
+      ]
+    },
+    {
+      "name": "crm: create ticket via name lookup",
+      "tags": [
+        "skill",
+        "arguments"
+      ],
+      "repeat": 0,
+      "passed": false,
+      "failures": [
+        "ticket is for contact 3, expected 2"
+      ],
+      "text": "I have opened a ticket for Grace Hopper regarding her scanner not charging. The ticket is marked as \"open\" and is due on October 10, 2026. Let me know if you need any further assistance!",
+      "calls": [
+        {
+          "name": "find_contacts",
+          "input": {
+            "query": "Grace Hopper"
+          }
+        },
+        {
+          "name": "create_ticket",
+          "input": {
+            "contact_id": 3,
+            "title": "Scanner not charging",
+            "priority": "normal",
+            "due_date": "2026-10-10"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 2,
+      "durationMs": 33852,
+      "timeToFirstTokenMs": 7230,
+      "prefillTokens": 2790,
+      "outputTokens": 375,
+      "kvReuseRate": 0.5,
+      "turns": [
+        {
+          "index": 0,
+          "input": "Open a ticket for Grace Hopper: her scanner won't charge. Normal priority, due October 10, 2026.",
+          "graded": true,
+          "passed": false,
+          "failures": [
+            "ticket is for contact 3, expected 2"
+          ],
+          "text": "I have opened a ticket for Grace Hopper regarding her scanner not charging. The ticket is marked as \"open\" and is due on October 10, 2026. Let me know if you need any further assistance!",
+          "calls": [
+            {
+              "name": "find_contacts",
+              "input": {
+                "query": "Grace Hopper"
+              }
+            },
+            {
+              "name": "create_ticket",
+              "input": {
+                "contact_id": 3,
+                "title": "Scanner not charging",
+                "priority": "normal",
+                "due_date": "2026-10-10"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 33852,
+          "timeToFirstTokenMs": 7230,
+          "prefillTokens": 2790,
+          "outputTokens": 375,
+          "promptChars": 12171,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 993,
+          "reasoningTail": "\nOkay, let's tackle this query. The user wants to open a ticket for Grace Hopper because her scanner isn't charging. The priority is normal, and the due date is October 10, 2026.\n\nFirst, I need to find Grace Hopper's contact ID from the crm_contacts table. The names in the table include 'Grace Hopper', so I'll use the find_contacts function with the query \"Grace Hopper\". That should return her ID.\n\nOnce I have her ID, I can create the ticket using the create_ticket function. The parameters required are contact_id, title, priority, and due_date. The title should be something like \"Scanner not charging\", priority is \"normal\", and the due date is \"2026-10-10\".\n\nI need to make sure the due date is in the correct format (YYYY-MM-DD). The user specified October 10, 2026, which translates to 2026-10-10. The priority is normal, which is one of the allowed values.\n\nSo the steps are: find the contact ID for Grace Hopper, then use that ID to create the ticket with the specified details.\n\n\n"
+        }
+      ]
+    }
+  ],
+  "byCase": [
+    {
+      "name": "sql: vocabulary mismatch",
+      "tags": [
+        "sql",
+        "join",
+        "recovery"
+      ],
+      "passRate": 1,
+      "passed": 3,
+      "runs": 3,
+      "meanMs": 83274,
+      "failures": []
+    },
+    {
+      "name": "crm: create ticket via name lookup",
+      "tags": [
+        "skill",
+        "arguments"
+      ],
+      "passRate": 0,
+      "passed": 0,
+      "runs": 1,
+      "meanMs": 33852,
+      "failures": [
+        "ticket is for contact 3, expected 2"
+      ]
+    }
+  ],
+  "latency": {
+    "meanMs": 70918,
+    "p50Ms": 85455,
+    "p90Ms": 106757,
+    "ttftP50Ms": 7230
+  },
+  "tokens": {
+    "meanOutput": 844,
+    "meanPrefill": 2769
+  },
+  "toolErrorRate": 0,
+  "kvReuseRate": 0.5,
+  "stopped": {
+    "reason": "fail-fast: crm: create ticket via name lookup #0",
+    "ranRuns": 4,
+    "plannedRuns": 15
+  },
+  "config": {
+    "model": "qwen3-4b",
+    "thinking": "auto",
+    "reasoningHistory": "current-turn",
+    "constrainToolCalls": true,
+    "embedding": "auto",
+    "reranker": "auto",
+    "searchMode": null,
+    "repeats": 3,
+    "only": null,
+    "cases": [
+      "crm: create ticket via name lookup",
+      "crm: map informal priority",
+      "crm: bulk action",
+      "crm: ask when ambiguous",
+      "sql: vocabulary mismatch"
+    ],
+    "failFast": true,
+    "ctx": 32768
+  },
+  "environment": {
+    "device": {
+      "webgpu": true,
+      "shaderF16": true,
+      "adapter": {
+        "vendor": "apple",
+        "architecture": "metal-3",
+        "description": ""
+      },
+      "maxStorageBufferMB": 4096,
+      "deviceMemoryGB": 32,
+      "mobile": false,
+      "gpuBudgetMB": 16384,
+      "crossOriginIsolated": false,
+      "storage": {
+        "quotaMB": 12928,
+        "usageMB": 2688,
+        "persisted": true
+      }
+    },
+    "plan": {
+      "llm": {
+        "preset": {
+          "id": "qwen3-4b",
+          "label": "Qwen3 4B",
+          "runtime": "webllm",
+          "model": "Qwen3-4B",
+          "params": "4B",
+          "vramMB": 3432,
+          "kvMBPer4k": 604,
+          "downloadMB": 2300,
+          "contextWindow": 16384,
+          "quality": 80,
+          "thinking": "hybrid"
+        },
+        "modelId": "Qwen3-4B-q4f16_1-MLC",
+        "contextWindow": 16384,
+        "estimatedMB": 5244
+      },
+      "embedding": {
+        "id": "embeddinggemma",
+        "label": "EmbeddingGemma 300M (best quality, 100+ languages)",
+        "model": "onnx-community/embeddinggemma-300m-ONNX",
+        "dimensions": 768,
+        "method": "sentence_embedding",
+        "queryPrefix": "task: search result | query: ",
+        "documentTemplate": "title: {title} | text: {text}",
+        "matryoshka": [
+          768,
+          512,
+          256,
+          128
+        ],
+        "dtype": {
+          "webgpu": "q4",
+          "webgpuF32": "q4",
+          "wasm": "q8"
+        },
+        "downloadMB": 197,
+        "maxTokens": 2048,
+        "languages": "multilingual",
+        "license": "gemma",
+        "searchMode": "vector",
+        "relevanceFloor": 0.35
+      }
+    },
+    "model": "webllm:Qwen3-4B-q4f16_1-MLC",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36"
+  },
+  "commit": "911362d",
+  "wallClockSec": 292
+}
