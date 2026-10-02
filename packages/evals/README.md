@@ -103,6 +103,12 @@ What still fails:
 - **Summary drops a fact:** "correction mid-conversation" (1/3; it was 3/3 in `fixes-6`, so this one swings between runs).
 - **One-offs:** a missing citation, and one unneeded search.
 
+After `fixes-7`, using the target and guard loops:
+- **"This Friday":** 3/3. `dateContext` groups days by week.
+- **Correction summary:** 3/3. Requests that rework earlier answers get a note to answer from the conversation.
+- **4-turn analysis turn 4:** the reasoning loop is cut, but Qwen3 4B still guesses ids and prices instead of looking them up. The 27B models pass it, so this is a model capability limit.
+- **Guard:** 62/65.
+
 ## Local models via Ollama (M2 Max, 32 GB, default GPU memory limit)
 
 Same 65 cases, graders and statistics, with `model=ollama:<tag>`, `think: 'auto'` and a 32K context. Pass rates were re-graded with the current graders (two answers flipped to pass).

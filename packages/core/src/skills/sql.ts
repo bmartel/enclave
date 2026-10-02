@@ -59,6 +59,7 @@ export function sqlSkill(options: SqlSkillOptions = {}) {
 - Primary keys: "id bigint primary key generated always as identity". Prefer text over varchar.
 - When the user asks to create, change or query data, run the SQL with execute_sql. Never just show SQL for the user to run.
 - Don't conclude data is missing from table or column names alone: amounts like revenue or totals are often computed across several columns or tables, so query to check.
+- Before inserting rows that refer to other rows (a customer, a product), look up their ids and values (such as prices) with a query. Never invent ids or values, and never insert a duplicate of an existing row.
 - Always add a LIMIT to exploratory queries (default 5, max ${maxRows}).
 - Check the current state section or call describe_schema before writing queries against tables you haven't seen.${
       readOnly ? '\n- The database is read-only: only SELECT queries are allowed.' : ''

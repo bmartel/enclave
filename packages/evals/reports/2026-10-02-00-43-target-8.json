@@ -1,0 +1,735 @@
+{
+  "label": "target-8",
+  "passRate": 1,
+  "overall": {
+    "passed": 6,
+    "total": 6,
+    "rate": 1,
+    "low": 0.6096569663469354,
+    "high": 0.9999999999999999
+  },
+  "consistency": {
+    "allRepeats": {
+      "passed": 2,
+      "total": 2,
+      "rate": 1,
+      "low": 0.34237195288961925,
+      "high": 1
+    },
+    "anyRepeat": {
+      "passed": 2,
+      "total": 2,
+      "rate": 1,
+      "low": 0.34237195288961925,
+      "high": 1
+    },
+    "repeats": 3
+  },
+  "byTag": [
+    {
+      "tag": "aggregate",
+      "passed": 3,
+      "total": 3,
+      "rate": 1,
+      "low": 0.43849391955098227,
+      "high": 1
+    },
+    {
+      "tag": "multi-turn",
+      "passed": 3,
+      "total": 3,
+      "rate": 1,
+      "low": 0.43849391955098227,
+      "high": 1
+    },
+    {
+      "tag": "rag",
+      "passed": 3,
+      "total": 3,
+      "rate": 1,
+      "low": 0.43849391955098227,
+      "high": 1
+    },
+    {
+      "tag": "skill",
+      "passed": 3,
+      "total": 3,
+      "rate": 1,
+      "low": 0.43849391955098227,
+      "high": 1
+    },
+    {
+      "tag": "sql",
+      "passed": 3,
+      "total": 3,
+      "rate": 1,
+      "low": 0.43849391955098227,
+      "high": 1
+    }
+  ],
+  "results": [
+    {
+      "name": "sql: average order value",
+      "tags": [
+        "sql",
+        "aggregate"
+      ],
+      "repeat": 0,
+      "passed": true,
+      "failures": [],
+      "text": "The average order value, excluding cancelled orders, is **$1,345.55**. This value is calculated by summing the revenue from all orders that are not cancelled and dividing by the number of such orders.",
+      "calls": [
+        {
+          "name": "execute_sql",
+          "input": {
+            "sql": "SELECT AVG(revenue) AS average_order_value FROM (SELECT SUM(quantity * unit_price) AS revenue FROM order_items JOIN orders ON order_items.order_id = orders.id WHERE orders.status != 'cancelled' GROUP BY orders.id) AS order_revenues;"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 2,
+      "durationMs": 98661,
+      "timeToFirstTokenMs": 8332,
+      "prefillTokens": 3072,
+      "outputTokens": 1101,
+      "kvReuseRate": 0.5,
+      "turns": [
+        {
+          "index": 0,
+          "input": "What is our average order value, not counting cancelled orders?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The average order value, excluding cancelled orders, is **$1,345.55**. This value is calculated by summing the revenue from all orders that are not cancelled and dividing by the number of such orders.",
+          "calls": [
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "SELECT AVG(revenue) AS average_order_value FROM (SELECT SUM(quantity * unit_price) AS revenue FROM order_items JOIN orders ON order_items.order_id = orders.id WHERE orders.status != 'cancelled' GROUP BY orders.id) AS order_revenues;"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 98661,
+          "timeToFirstTokenMs": 8332,
+          "prefillTokens": 3072,
+          "outputTokens": 1101,
+          "promptChars": 16282,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 4399
+        }
+      ]
+    },
+    {
+      "name": "sql: average order value",
+      "tags": [
+        "sql",
+        "aggregate"
+      ],
+      "repeat": 1,
+      "passed": true,
+      "failures": [],
+      "text": "The average order value, excluding cancelled orders, is **$1,345.55**.",
+      "calls": [
+        {
+          "name": "execute_sql",
+          "input": {
+            "sql": "SELECT SUM(total_revenue) / COUNT(*) AS average_order_value FROM (SELECT orders.id as order_id, SUM(order_items.quantity * order_items.unit_price) AS total_revenue FROM orders JOIN order_items ON orders.id = order_items.order_id WHERE orders.status != 'cancelled' GROUP BY orders.id) AS order_revenue;"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 2,
+      "durationMs": 105555,
+      "timeToFirstTokenMs": 8213,
+      "prefillTokens": 3072,
+      "outputTokens": 1177,
+      "kvReuseRate": 0.5,
+      "turns": [
+        {
+          "index": 0,
+          "input": "What is our average order value, not counting cancelled orders?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The average order value, excluding cancelled orders, is **$1,345.55**.",
+          "calls": [
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "SELECT SUM(total_revenue) / COUNT(*) AS average_order_value FROM (SELECT orders.id as order_id, SUM(order_items.quantity * order_items.unit_price) AS total_revenue FROM orders JOIN order_items ON orders.id = order_items.order_id WHERE orders.status != 'cancelled' GROUP BY orders.id) AS order_revenue;"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 105555,
+          "timeToFirstTokenMs": 8213,
+          "prefillTokens": 3072,
+          "outputTokens": 1177,
+          "promptChars": 16450,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 4498
+        }
+      ]
+    },
+    {
+      "name": "sql: average order value",
+      "tags": [
+        "sql",
+        "aggregate"
+      ],
+      "repeat": 2,
+      "passed": true,
+      "failures": [],
+      "text": "The average order value, excluding cancelled orders, is **$1,345.55**. \n\nThis value is calculated by summing the revenue from all orders that are not cancelled and dividing by the total number of such orders.",
+      "calls": [
+        {
+          "name": "execute_sql",
+          "input": {
+            "sql": "SELECT SUM(total_revenue) / COUNT(*) AS average_order_value FROM (SELECT orders.id AS order_id, SUM(order_items.quantity * order_items.unit_price) AS total_revenue FROM orders JOIN order_items ON orders.id = order_items.order_id WHERE orders.status != 'cancelled' GROUP BY orders.id) AS order_revenue;"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 2,
+      "durationMs": 101499,
+      "timeToFirstTokenMs": 8211,
+      "prefillTokens": 3072,
+      "outputTokens": 1133,
+      "kvReuseRate": 0.5,
+      "turns": [
+        {
+          "index": 0,
+          "input": "What is our average order value, not counting cancelled orders?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The average order value, excluding cancelled orders, is **$1,345.55**. \n\nThis value is calculated by summing the revenue from all orders that are not cancelled and dividing by the total number of such orders.",
+          "calls": [
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "SELECT SUM(total_revenue) / COUNT(*) AS average_order_value FROM (SELECT orders.id AS order_id, SUM(order_items.quantity * order_items.unit_price) AS total_revenue FROM orders JOIN order_items ON orders.id = order_items.order_id WHERE orders.status != 'cancelled' GROUP BY orders.id) AS order_revenue;"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 101499,
+          "timeToFirstTokenMs": 8211,
+          "prefillTokens": 3072,
+          "outputTokens": 1133,
+          "promptChars": 16399,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 4447
+        }
+      ]
+    },
+    {
+      "name": "conv: support workflow",
+      "tags": [
+        "multi-turn",
+        "skill",
+        "rag"
+      ],
+      "repeat": 0,
+      "passed": true,
+      "failures": [],
+      "text": "According to the Customer Support SLAs, priority 1 (production down) issues require a **first response within 1 hour, 24/7**. This is outlined in the support/sla.md document [1].",
+      "calls": [],
+      "toolErrors": 0,
+      "steps": 7,
+      "durationMs": 153704,
+      "timeToFirstTokenMs": 9427,
+      "prefillTokens": 14662,
+      "outputTokens": 1362,
+      "kvReuseRate": 0.375,
+      "turns": [
+        {
+          "index": 0,
+          "input": "Find the Wei Chen who works at Globex.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The query returned two contacts named \"Wei Chen\":\n1. **Wei Chen** at **Globex** (email: wei.chen@globex.example)\n2. **Wei Chen** at **Umbrella** (email: wchen@umbrella.example)\n\nWhich one are you looking for?",
+          "calls": [
+            {
+              "name": "find_contacts",
+              "input": {
+                "query": "Wei Chen"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 43307,
+          "timeToFirstTokenMs": 8223,
+          "prefillTokens": 3101,
+          "outputTokens": 457,
+          "promptChars": 13293,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 1483
+        },
+        {
+          "index": 1,
+          "input": "What open tickets does he have?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The open ticket for **Wei Chen** at Globex is:\n\n- **Title**: Scanner firmware update fails\n- **Priority**: High\n- **Status**: Open\n- **Due Date**: 2026-09-30\n\nLet me know if you need further details about this ticket.",
+          "calls": [
+            {
+              "name": "list_tickets",
+              "input": {
+                "contact_id": 4,
+                "status": "open"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 54013,
+          "timeToFirstTokenMs": 9179,
+          "prefillTokens": 3324,
+          "outputTokens": 545,
+          "promptChars": 14710,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 2016
+        },
+        {
+          "index": 2,
+          "input": "Mark it as in progress.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The ticket with ID 3 has been marked as **in progress**. Let me know if you need any further updates or actions regarding this ticket.",
+          "calls": [
+            {
+              "name": "update_ticket_status",
+              "input": {
+                "ticket_id": 3,
+                "status": "in_progress"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 30816,
+          "timeToFirstTokenMs": 9723,
+          "prefillTokens": 4634,
+          "outputTokens": 182,
+          "promptChars": 17285,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 568
+        },
+        {
+          "index": 3,
+          "input": "What's our first response time commitment for priority 1 issues?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "According to the Customer Support SLAs, priority 1 (production down) issues require a **first response within 1 hour, 24/7**. This is outlined in the support/sla.md document [1].",
+          "calls": [],
+          "toolErrors": 0,
+          "steps": 1,
+          "durationMs": 25568,
+          "timeToFirstTokenMs": 10582,
+          "prefillTokens": 3603,
+          "outputTokens": 178,
+          "promptChars": 13723,
+          "compacted": false,
+          "kvReuseRate": 0,
+          "reasoningChars": 614
+        }
+      ]
+    },
+    {
+      "name": "conv: support workflow",
+      "tags": [
+        "multi-turn",
+        "skill",
+        "rag"
+      ],
+      "repeat": 1,
+      "passed": true,
+      "failures": [],
+      "text": "According to the support SLAs, **Priority 1 (production down)** issues require a **first response within 1 hour, 24/7**. \n\nThis is explicitly stated in the Customer Support SLAs document [1]. \n\nWould you like me to check if any tickets currently exceed this response time?",
+      "calls": [],
+      "toolErrors": 0,
+      "steps": 7,
+      "durationMs": 227735,
+      "timeToFirstTokenMs": 9681,
+      "prefillTokens": 14945,
+      "outputTokens": 2175,
+      "kvReuseRate": 0.375,
+      "turns": [
+        {
+          "index": 0,
+          "input": "Find the Wei Chen who works at Globex.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The query returned two contacts named \"Wei Chen\":\n\n1. **Wei Chen** at **Globex** with email `wei.chen@globex.example`\n2. **Wei Chen** at **Umbrella** with email `wchen@umbrella.example`\n\nSince the user specifically asked for the \"Wei Chen who works at Globex,\" the correct contact is the one at **Globex** (`id: 4`). \n\nWould you like me to proceed with this contact (e.g., create a ticket, look up details, or take another action)?",
+          "calls": [
+            {
+              "name": "find_contacts",
+              "input": {
+                "query": "Wei Chen"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 108261,
+          "timeToFirstTokenMs": 8211,
+          "prefillTokens": 3101,
+          "outputTokens": 1204,
+          "promptChars": 16349,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 4539
+        },
+        {
+          "index": 1,
+          "input": "What open tickets does he have?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The following open ticket is associated with **Wei Chen** at **Globex**:\n\n- **Ticket ID**: 3  \n  **Title**: Scanner firmware update fails  \n  **Priority**: High  \n  **Status**: Open  \n  **Due Date**: 2026-09-30  \n\nWould you like to take action on this ticket (e.g., update the status, add comments, or create a follow-up task)?",
+          "calls": [
+            {
+              "name": "list_tickets",
+              "input": {
+                "contact_id": 4,
+                "status": "open"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 49051,
+          "timeToFirstTokenMs": 9252,
+          "prefillTokens": 3378,
+          "outputTokens": 482,
+          "promptChars": 14498,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 1581
+        },
+        {
+          "index": 2,
+          "input": "Mark it as in progress.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The ticket with ID 3 has been marked as **\"in progress\"**. \n\nHere’s the updated status:\n\n- **Ticket ID**: 3  \n  **Title**: Scanner firmware update fails  \n  **Priority**: High  \n  **Status**: In Progress  \n  **Due Date**: 2026-09-30  \n\nLet me know if you'd like to add comments, assign follow-ups, or take any other action on this ticket.",
+          "calls": [
+            {
+              "name": "update_ticket_status",
+              "input": {
+                "ticket_id": 3,
+                "status": "in_progress"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 43414,
+          "timeToFirstTokenMs": 10098,
+          "prefillTokens": 4716,
+          "outputTokens": 306,
+          "promptChars": 17856,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 806
+        },
+        {
+          "index": 3,
+          "input": "What's our first response time commitment for priority 1 issues?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "According to the support SLAs, **Priority 1 (production down)** issues require a **first response within 1 hour, 24/7**. \n\nThis is explicitly stated in the Customer Support SLAs document [1]. \n\nWould you like me to check if any tickets currently exceed this response time?",
+          "calls": [],
+          "toolErrors": 0,
+          "steps": 1,
+          "durationMs": 27009,
+          "timeToFirstTokenMs": 11162,
+          "prefillTokens": 3750,
+          "outputTokens": 183,
+          "promptChars": 14260,
+          "compacted": false,
+          "kvReuseRate": 0,
+          "reasoningChars": 518
+        }
+      ]
+    },
+    {
+      "name": "conv: support workflow",
+      "tags": [
+        "multi-turn",
+        "skill",
+        "rag"
+      ],
+      "repeat": 2,
+      "passed": true,
+      "failures": [],
+      "text": "According to the Customer Support SLAs documentation, priority 1 (production down) issues require a **first response within 1 hour, 24/7**. \n\nThis is explicitly stated in the support/sla.md document [1]. \n\nLet me know if you need clarification on other SLA tiers!",
+      "calls": [],
+      "toolErrors": 0,
+      "steps": 7,
+      "durationMs": 172924,
+      "timeToFirstTokenMs": 9302,
+      "prefillTokens": 14594,
+      "outputTokens": 1616,
+      "kvReuseRate": 0.375,
+      "turns": [
+        {
+          "index": 0,
+          "input": "Find the Wei Chen who works at Globex.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The contact you're looking for is:\n\n- **Name:** Wei Chen  \n- **Company:** Globex  \n- **Email:** wei.chen@globex.example  \n\nThis is the record for the Wei Chen associated with Globex. Let me know if you need further details!",
+          "calls": [
+            {
+              "name": "find_contacts",
+              "input": {
+                "query": "Wei Chen Globex"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 59886,
+          "timeToFirstTokenMs": 8200,
+          "prefillTokens": 3052,
+          "outputTokens": 663,
+          "promptChars": 14098,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 2496
+        },
+        {
+          "index": 1,
+          "input": "What open tickets does he have?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The open ticket for Wei Chen (contact ID 4) is:\n\n- **Title:** Scanner firmware update fails  \n- **Priority:** High  \n- **Status:** Open  \n- **Due Date:** 2026-09-30  \n\nLet me know if you need further details about this ticket!",
+          "calls": [
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "SELECT * FROM crm_tickets WHERE contact_id = 4 AND status = 'open';"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 49261,
+          "timeToFirstTokenMs": 8933,
+          "prefillTokens": 3312,
+          "outputTokens": 499,
+          "promptChars": 14427,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 1766
+        },
+        {
+          "index": 2,
+          "input": "Mark it as in progress.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The ticket with ID 3 has been marked as **in progress**. \n\nLet me know if you need further assistance!",
+          "calls": [
+            {
+              "name": "update_ticket_status",
+              "input": {
+                "ticket_id": 3,
+                "status": "in_progress"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 36915,
+          "timeToFirstTokenMs": 9658,
+          "prefillTokens": 4633,
+          "outputTokens": 258,
+          "promptChars": 17548,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 855
+        },
+        {
+          "index": 3,
+          "input": "What's our first response time commitment for priority 1 issues?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "According to the Customer Support SLAs documentation, priority 1 (production down) issues require a **first response within 1 hour, 24/7**. \n\nThis is explicitly stated in the support/sla.md document [1]. \n\nLet me know if you need clarification on other SLA tiers!",
+          "calls": [],
+          "toolErrors": 0,
+          "steps": 1,
+          "durationMs": 26862,
+          "timeToFirstTokenMs": 10415,
+          "prefillTokens": 3597,
+          "outputTokens": 196,
+          "promptChars": 13667,
+          "compacted": false,
+          "kvReuseRate": 0,
+          "reasoningChars": 598
+        }
+      ]
+    }
+  ],
+  "byCase": [
+    {
+      "name": "sql: average order value",
+      "tags": [
+        "sql",
+        "aggregate"
+      ],
+      "passRate": 1,
+      "passed": 3,
+      "runs": 3,
+      "meanMs": 101905,
+      "failures": []
+    },
+    {
+      "name": "conv: support workflow",
+      "tags": [
+        "multi-turn",
+        "skill",
+        "rag"
+      ],
+      "passRate": 1,
+      "passed": 3,
+      "runs": 3,
+      "meanMs": 184788,
+      "failures": []
+    }
+  ],
+  "latency": {
+    "meanMs": 143346,
+    "p50Ms": 153704,
+    "p90Ms": 227735,
+    "ttftP50Ms": 9302
+  },
+  "tokens": {
+    "meanOutput": 1427,
+    "meanPrefill": 8903
+  },
+  "toolErrorRate": 0,
+  "kvReuseRate": 0.4375,
+  "laterTurns": {
+    "count": 9,
+    "passRate": 1,
+    "ttftP50Ms": 9723,
+    "meanPrefillTokens": 3883,
+    "meanPromptChars": 15330,
+    "kvReuseRate": 0.3333333333333333
+  },
+  "config": {
+    "model": "qwen3-4b",
+    "thinking": "auto",
+    "reasoningHistory": "current-turn",
+    "constrainToolCalls": true,
+    "embedding": "auto",
+    "reranker": "auto",
+    "searchMode": null,
+    "repeats": 3,
+    "only": null,
+    "cases": [
+      "sql: average order value",
+      "conv: support workflow"
+    ],
+    "first": [
+      "sql: average order value",
+      "conv: support workflow"
+    ],
+    "failFast": true,
+    "ctx": 32768
+  },
+  "environment": {
+    "device": {
+      "webgpu": true,
+      "shaderF16": true,
+      "adapter": {
+        "vendor": "apple",
+        "architecture": "metal-3",
+        "description": ""
+      },
+      "maxStorageBufferMB": 4096,
+      "deviceMemoryGB": 32,
+      "mobile": false,
+      "gpuBudgetMB": 16384,
+      "crossOriginIsolated": false,
+      "storage": {
+        "quotaMB": 12928,
+        "usageMB": 2688,
+        "persisted": true
+      }
+    },
+    "plan": {
+      "llm": {
+        "preset": {
+          "id": "qwen3-4b",
+          "label": "Qwen3 4B",
+          "runtime": "webllm",
+          "model": "Qwen3-4B",
+          "params": "4B",
+          "vramMB": 3432,
+          "kvMBPer4k": 604,
+          "downloadMB": 2300,
+          "contextWindow": 16384,
+          "quality": 80,
+          "thinking": "hybrid"
+        },
+        "modelId": "Qwen3-4B-q4f16_1-MLC",
+        "contextWindow": 16384,
+        "estimatedMB": 5244
+      },
+      "embedding": {
+        "id": "embeddinggemma",
+        "label": "EmbeddingGemma 300M (best quality, 100+ languages)",
+        "model": "onnx-community/embeddinggemma-300m-ONNX",
+        "dimensions": 768,
+        "method": "sentence_embedding",
+        "queryPrefix": "task: search result | query: ",
+        "documentTemplate": "title: {title} | text: {text}",
+        "matryoshka": [
+          768,
+          512,
+          256,
+          128
+        ],
+        "dtype": {
+          "webgpu": "q4",
+          "webgpuF32": "q4",
+          "wasm": "q8"
+        },
+        "downloadMB": 197,
+        "maxTokens": 2048,
+        "languages": "multilingual",
+        "license": "gemma",
+        "searchMode": "vector",
+        "relevanceFloor": 0.35
+      }
+    },
+    "model": "webllm:Qwen3-4B-q4f16_1-MLC",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36"
+  },
+  "commit": "39ca41b",
+  "wallClockSec": 869
+}

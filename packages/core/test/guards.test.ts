@@ -162,11 +162,17 @@ describe('auto-retrieval relevance', () => {
 })
 
 describe('dateContext', () => {
-  it('spells out upcoming weekdays', () => {
-    const text = dateContext('2026-09-28', 7)
-    expect(text).toMatch(/^Today is Monday 2026-09-28\./)
-    expect(text).toContain('Fri 2026-10-02')
-    expect(text).toContain('Mon 2026-10-05')
+  it('groups days into this week and next week with full weekday names', () => {
+    const text = dateContext('2026-09-28')
+    expect(text).toMatch(/^Today is Monday 2026-09-28\. Tomorrow is Tuesday 2026-09-29\./)
+    expect(text).toContain('Rest of this week: Tuesday 2026-09-29, Wednesday 2026-09-30, Thursday 2026-10-01, Friday 2026-10-02, Saturday 2026-10-03, Sunday 2026-10-04.')
+    expect(text).toContain('Next week: Monday 2026-10-05,')
+    expect(text).toContain('Friday 2026-10-09')
+  })
+  it('on a Sunday, "this week" is over: only next week is listed', () => {
+    const text = dateContext('2026-10-04')
+    expect(text).not.toContain('Rest of this week')
+    expect(text).toContain('Next week: Monday 2026-10-05,')
   })
 })
 
@@ -355,5 +361,21 @@ describe('role follow-up in auto-retrieval', () => {
       (await knowledgeSkill().context!({ db, knowledge: kb, embedder, threadId: 't', messages: [{ role: 'user', content: q }] })) ?? ''
     expect(await context('Who approves a 750 dollar expense? Give me their name.')).toContain('Priya Raman')
     expect(await context('What is the approval limit for expenses?')).not.toContain('Priya Raman')
+  })
+})
+
+describe('reasoningLoops', () => {
+  it('spots reasoning that repeats itself', async () => {
+    const { reasoningLoops } = await import('../src/util.js')
+    const loop = Array.from({ length: 4 }, () => "But without knowing the customer's ID, we can't proceed with the insert. Therefore, maybe the customer exists.").join(' ')
+    expect(reasoningLoops(loop)).toBe(true)
+  })
+  it('does not flag normal step-by-step reasoning or short repeated phrases', async () => {
+    const { reasoningLoops } = await import('../src/util.js')
+    const normal = 'First, find the contact id. Then create the ticket with that id. The due date is Friday 2026-10-02. Priority is high. Okay. Okay. Okay. Wait.'
+    expect(reasoningLoops(normal)).toBe(false)
+    // Normal deliberation that revisits a plan (this was cut, wrongly, by a looser threshold).
+    const deliberation = Array.from({ length: 3 }, (_, i) => `So, the SQL query would need to compute this. Option ${i}: join orders and order_items.`).join(' ')
+    expect(reasoningLoops(deliberation)).toBe(false)
   })
 })

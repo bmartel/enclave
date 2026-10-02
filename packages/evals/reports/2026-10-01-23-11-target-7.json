@@ -1,0 +1,353 @@
+{
+  "label": "target-7",
+  "passRate": 0,
+  "overall": {
+    "passed": 0,
+    "total": 1,
+    "rate": 0,
+    "low": 0,
+    "high": 0.7934567085261071
+  },
+  "consistency": {
+    "allRepeats": {
+      "passed": 0,
+      "total": 1,
+      "rate": 0,
+      "low": 0,
+      "high": 0.7934567085261071
+    },
+    "anyRepeat": {
+      "passed": 0,
+      "total": 1,
+      "rate": 0,
+      "low": 0,
+      "high": 0.7934567085261071
+    },
+    "repeats": 3
+  },
+  "byTag": [
+    {
+      "tag": "multi-turn",
+      "passed": 0,
+      "total": 1,
+      "rate": 0,
+      "low": 0,
+      "high": 0.7934567085261071
+    },
+    {
+      "tag": "sql",
+      "passed": 0,
+      "total": 1,
+      "rate": 0,
+      "low": 0,
+      "high": 0.7934567085261071
+    },
+    {
+      "tag": "write",
+      "passed": 0,
+      "total": 1,
+      "rate": 0,
+      "low": 0,
+      "high": 0.7934567085261071
+    }
+  ],
+  "results": [
+    {
+      "name": "conv: analysis that evolves",
+      "tags": [
+        "multi-turn",
+        "sql",
+        "write"
+      ],
+      "repeat": 0,
+      "passed": false,
+      "failures": [
+        "turn 4: error: timed out"
+      ],
+      "text": "The error indicates that the `order_items.order_id` must reference an existing `orders.id`. Since the `orders` table was not properly inserted, the `order_items` insertion failed. Let's fix this by first inserting the `orders` record and then the `order_items` record.\n\nHere is the corrected SQL:\n\n```sql\nINSERT INTO orders (customer_id, status, ordered_at) VALUES (1, 'delivered', '2026-06-15');\nINSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (nextval('orders_id_seq'), 3, 2, 100.00);\n```\n\nI will now execute this corrected query.",
+      "calls": [
+        {
+          "name": "execute_sql",
+          "input": {
+            "sql": "INSERT INTO orders (id, customer_id, status, ordered_at) VALUES (nextval('orders_id_seq'), 1, 'delivered', '2026-06-15'); INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (nextval('order_items_order_id_seq'), 3, 2, 100.00);"
+          }
+        },
+        {
+          "name": "execute_sql",
+          "input": {
+            "sql": "INSERT INTO orders (customer_id, status, ordered_at) VALUES (1, 'delivered', '2026-06-15'); INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (nextval('orders_id_seq'), 3, 2, 100.00);"
+          }
+        },
+        {
+          "name": "execute_sql",
+          "input": {
+            "sql": "INSERT INTO orders (customer_id, status, ordered_at) VALUES (1, 'delivered', '2026-06-15'); INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (nextval('orders_id_seq'), 3, 2, 100.00);"
+          }
+        }
+      ],
+      "toolErrors": 3,
+      "steps": 10,
+      "durationMs": 664886,
+      "timeToFirstTokenMs": 10320,
+      "prefillTokens": 24259,
+      "outputTokens": 2315,
+      "kvReuseRate": 0.375,
+      "turns": [
+        {
+          "index": 0,
+          "input": "What was our revenue in June 2026? Exclude cancelled orders.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The total revenue for June 2026, excluding cancelled orders, is $34,799.00.",
+          "calls": [
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "SELECT SUM(order_items.quantity * order_items.unit_price) AS total_revenue FROM order_items JOIN orders ON order_items.order_id = orders.id WHERE orders.status != 'cancelled' AND orders.ordered_at >= '2026-06-01' AND orders.ordered_at < '2026-07-01';"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 120382,
+          "timeToFirstTokenMs": 8639,
+          "prefillTokens": 7354,
+          "outputTokens": 360,
+          "promptChars": 16407,
+          "compacted": false,
+          "kvReuseRate": 0,
+          "reasoningChars": 3222
+        },
+        {
+          "index": 1,
+          "input": "How does that compare with May?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The total revenue for May 2026, excluding cancelled orders, is $30,020.00. \n\nComparing this to June 2026's revenue of $34,799.00, June showed an increase of $4,779.00 over May. This suggests a positive trend in revenue during these months.",
+          "calls": [
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "SELECT SUM(order_items.quantity * order_items.unit_price) AS total_revenue FROM order_items JOIN orders ON order_items.order_id = orders.id WHERE orders.status != 'cancelled' AND orders.ordered_at >= '2026-05-01' AND orders.ordered_at < '2026-06-01';"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 70345,
+          "timeToFirstTokenMs": 10101,
+          "prefillTokens": 3559,
+          "outputTokens": 690,
+          "promptChars": 15699,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 1905
+        },
+        {
+          "index": 2,
+          "input": "Which of those two months had more orders?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The number of orders in May 2026 was 17, and in June 2026 it was 22. Therefore, June 2026 had more orders than May 2026.",
+          "calls": [
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "SELECT COUNT(*) AS order_count FROM orders WHERE status != 'cancelled' AND ordered_at >= '2026-05-01' AND ordered_at < '2026-06-01';"
+              }
+            },
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "SELECT COUNT(*) AS order_count FROM orders WHERE status != 'cancelled' AND ordered_at >= '2026-06-01' AND ordered_at < '2026-07-01';"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 87163,
+          "timeToFirstTokenMs": 10683,
+          "prefillTokens": 3741,
+          "outputTokens": 837,
+          "promptChars": 16981,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 2521
+        },
+        {
+          "index": 3,
+          "input": "Record a new delivered order for Hiro Silva dated 2026-06-15: 2 units of the X300 Scanner at the list price.",
+          "graded": true,
+          "passed": false,
+          "failures": [
+            "error: timed out"
+          ],
+          "text": "The error indicates that the `order_items.order_id` must reference an existing `orders.id`. Since the `orders` table was not properly inserted, the `order_items` insertion failed. Let's fix this by first inserting the `orders` record and then the `order_items` record.\n\nHere is the corrected SQL:\n\n```sql\nINSERT INTO orders (customer_id, status, ordered_at) VALUES (1, 'delivered', '2026-06-15');\nINSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (nextval('orders_id_seq'), 3, 2, 100.00);\n```\n\nI will now execute this corrected query.",
+          "calls": [
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "INSERT INTO orders (id, customer_id, status, ordered_at) VALUES (nextval('orders_id_seq'), 1, 'delivered', '2026-06-15'); INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (nextval('order_items_order_id_seq'), 3, 2, 100.00);"
+              }
+            },
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "INSERT INTO orders (customer_id, status, ordered_at) VALUES (1, 'delivered', '2026-06-15'); INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (nextval('orders_id_seq'), 3, 2, 100.00);"
+              }
+            },
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "INSERT INTO orders (customer_id, status, ordered_at) VALUES (1, 'delivered', '2026-06-15'); INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (nextval('orders_id_seq'), 3, 2, 100.00);"
+              }
+            }
+          ],
+          "toolErrors": 3,
+          "steps": 4,
+          "durationMs": 386996,
+          "timeToFirstTokenMs": 11855,
+          "prefillTokens": 9605,
+          "outputTokens": 428,
+          "promptChars": 22657,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 10898,
+          "reasoningTail": "nsert into order_items with nextval('orders_id_seq'), which would get the next available id. However, if the orders table's id is a serial, then inserting into orders would generate the id, and then nextval would get the next id. But if the order is inserted first, then the nextval would be the next id, but the order's id is the last inserted. So perhaps the user should first insert into orders, then get the last inserted id, then use that in order_items.\n\nAlternatively, maybe the user should use the last_insert_id() function, but since we're using PostgreSQL, the correct way is to insert into orders, then use the generated id in order_items.\n\nBut in the previous attempt, the user tried to insert into order_items with nextval('orders_id_seq'), which is the next available id, but the order hasn't been inserted yet. Therefore, the order_id in order_items would be the next id, which doesn't exist yet. Hence, the foreign key constraint violation.\n\nSo the correct approach is to first insert the order into orders, then insert into order_items with the generated order_id.\n\nTherefore, the correct SQL is:\n\nINSERT INTO orders (customer_id, status, ordered_at) VALUES (1, 'delivered', '2026-06-15');\n\nThen, get the last inserted order_id, then insert into order_items with that order_id, product_id 3, quantity 2, unit_price 100.00.\n\nBut in the previous attempt, the user tried to insert into order_items with nextval('orders_id_seq'), which would get the next id, but the order hasn't been\n\n\n"
+        }
+      ]
+    }
+  ],
+  "byCase": [
+    {
+      "name": "conv: analysis that evolves",
+      "tags": [
+        "multi-turn",
+        "sql",
+        "write"
+      ],
+      "passRate": 0,
+      "passed": 0,
+      "runs": 1,
+      "meanMs": 664886,
+      "failures": [
+        "turn 4: error: timed out"
+      ]
+    }
+  ],
+  "latency": {
+    "meanMs": 664886,
+    "p50Ms": 664886,
+    "p90Ms": 664886,
+    "ttftP50Ms": 10320
+  },
+  "tokens": {
+    "meanOutput": 2315,
+    "meanPrefill": 24259
+  },
+  "toolErrorRate": 0.3,
+  "kvReuseRate": 0.375,
+  "laterTurns": {
+    "count": 3,
+    "passRate": 0.6666666666666666,
+    "ttftP50Ms": 10683,
+    "meanPrefillTokens": 5635,
+    "meanPromptChars": 18446,
+    "kvReuseRate": 0.5
+  },
+  "stopped": {
+    "reason": "fail-fast: conv: analysis that evolves #0",
+    "ranRuns": 1,
+    "plannedRuns": 3
+  },
+  "config": {
+    "model": "qwen3-4b",
+    "thinking": "auto",
+    "reasoningHistory": "current-turn",
+    "constrainToolCalls": true,
+    "embedding": "auto",
+    "reranker": "auto",
+    "searchMode": null,
+    "repeats": 3,
+    "only": null,
+    "cases": [
+      "conv: analysis that evolves"
+    ],
+    "failFast": true,
+    "ctx": 32768
+  },
+  "environment": {
+    "device": {
+      "webgpu": true,
+      "shaderF16": true,
+      "adapter": {
+        "vendor": "apple",
+        "architecture": "metal-3",
+        "description": ""
+      },
+      "maxStorageBufferMB": 4096,
+      "deviceMemoryGB": 32,
+      "mobile": false,
+      "gpuBudgetMB": 16384,
+      "crossOriginIsolated": false,
+      "storage": {
+        "quotaMB": 12928,
+        "usageMB": 2688,
+        "persisted": true
+      }
+    },
+    "plan": {
+      "llm": {
+        "preset": {
+          "id": "qwen3-4b",
+          "label": "Qwen3 4B",
+          "runtime": "webllm",
+          "model": "Qwen3-4B",
+          "params": "4B",
+          "vramMB": 3432,
+          "kvMBPer4k": 604,
+          "downloadMB": 2300,
+          "contextWindow": 16384,
+          "quality": 80,
+          "thinking": "hybrid"
+        },
+        "modelId": "Qwen3-4B-q4f16_1-MLC",
+        "contextWindow": 16384,
+        "estimatedMB": 5244
+      },
+      "embedding": {
+        "id": "embeddinggemma",
+        "label": "EmbeddingGemma 300M (best quality, 100+ languages)",
+        "model": "onnx-community/embeddinggemma-300m-ONNX",
+        "dimensions": 768,
+        "method": "sentence_embedding",
+        "queryPrefix": "task: search result | query: ",
+        "documentTemplate": "title: {title} | text: {text}",
+        "matryoshka": [
+          768,
+          512,
+          256,
+          128
+        ],
+        "dtype": {
+          "webgpu": "q4",
+          "webgpuF32": "q4",
+          "wasm": "q8"
+        },
+        "downloadMB": 197,
+        "maxTokens": 2048,
+        "languages": "multilingual",
+        "license": "gemma",
+        "searchMode": "vector",
+        "relevanceFloor": 0.35
+      }
+    },
+    "model": "webllm:Qwen3-4B-q4f16_1-MLC",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36"
+  },
+  "commit": "39ca41b",
+  "wallClockSec": 673
+}

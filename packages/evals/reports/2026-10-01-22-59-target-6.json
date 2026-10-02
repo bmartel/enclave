@@ -1,0 +1,915 @@
+{
+  "label": "target-6",
+  "passRate": 0.8571428571428571,
+  "overall": {
+    "passed": 6,
+    "total": 7,
+    "rate": 0.8571428571428571,
+    "low": 0.48686549668097007,
+    "high": 0.9743210440510253
+  },
+  "consistency": {
+    "allRepeats": {
+      "passed": 2,
+      "total": 3,
+      "rate": 0.6666666666666666,
+      "low": 0.2076549551264879,
+      "high": 0.9385096847238394
+    },
+    "anyRepeat": {
+      "passed": 2,
+      "total": 3,
+      "rate": 0.6666666666666666,
+      "low": 0.2076549551264879,
+      "high": 0.9385096847238394
+    },
+    "repeats": 3
+  },
+  "byTag": [
+    {
+      "tag": "arguments",
+      "passed": 3,
+      "total": 3,
+      "rate": 1,
+      "low": 0.43849391955098227,
+      "high": 1
+    },
+    {
+      "tag": "correction",
+      "passed": 3,
+      "total": 3,
+      "rate": 1,
+      "low": 0.43849391955098227,
+      "high": 1
+    },
+    {
+      "tag": "dates",
+      "passed": 3,
+      "total": 3,
+      "rate": 1,
+      "low": 0.43849391955098227,
+      "high": 1
+    },
+    {
+      "tag": "multi-turn",
+      "passed": 3,
+      "total": 4,
+      "rate": 0.75,
+      "low": 0.3006360524426366,
+      "high": 0.9544139373553637
+    },
+    {
+      "tag": "rag",
+      "passed": 3,
+      "total": 3,
+      "rate": 1,
+      "low": 0.43849391955098227,
+      "high": 1
+    },
+    {
+      "tag": "skill",
+      "passed": 3,
+      "total": 3,
+      "rate": 1,
+      "low": 0.43849391955098227,
+      "high": 1
+    },
+    {
+      "tag": "sql",
+      "passed": 0,
+      "total": 1,
+      "rate": 0,
+      "low": 0,
+      "high": 0.7934567085261071
+    },
+    {
+      "tag": "write",
+      "passed": 0,
+      "total": 1,
+      "rate": 0,
+      "low": 0,
+      "high": 0.7934567085261071
+    }
+  ],
+  "results": [
+    {
+      "name": "crm: relative date",
+      "tags": [
+        "skill",
+        "arguments",
+        "dates"
+      ],
+      "repeat": 0,
+      "passed": true,
+      "failures": [],
+      "text": "I have created a high priority ticket for Linus Berg (Hooli) about a broken charging dock, with a due date of 2026-10-02. The ticket is currently open.\n\nWould you like me to check if there are any other actions needed for this ticket?",
+      "calls": [
+        {
+          "name": "find_contacts",
+          "input": {
+            "query": "Linus Berg"
+          }
+        },
+        {
+          "name": "create_ticket",
+          "input": {
+            "contact_id": 6,
+            "title": "Broken Charging Dock",
+            "priority": "high",
+            "due_date": "2026-10-02"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 2,
+      "durationMs": 39678,
+      "timeToFirstTokenMs": 8627,
+      "prefillTokens": 3144,
+      "outputTokens": 403,
+      "kvReuseRate": 0.5,
+      "turns": [
+        {
+          "index": 0,
+          "input": "Create a high priority ticket for Linus Berg about a broken charging dock, due this Friday.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "I have created a high priority ticket for Linus Berg (Hooli) about a broken charging dock, with a due date of 2026-10-02. The ticket is currently open.\n\nWould you like me to check if there are any other actions needed for this ticket?",
+          "calls": [
+            {
+              "name": "find_contacts",
+              "input": {
+                "query": "Linus Berg"
+              }
+            },
+            {
+              "name": "create_ticket",
+              "input": {
+                "contact_id": 6,
+                "title": "Broken Charging Dock",
+                "priority": "high",
+                "due_date": "2026-10-02"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 39678,
+          "timeToFirstTokenMs": 8627,
+          "prefillTokens": 3144,
+          "outputTokens": 403,
+          "promptChars": 13218,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 1013
+        }
+      ]
+    },
+    {
+      "name": "crm: relative date",
+      "tags": [
+        "skill",
+        "arguments",
+        "dates"
+      ],
+      "repeat": 1,
+      "passed": true,
+      "failures": [],
+      "text": "The ticket has been created successfully. Here are the details:\n\n- **Contact**: Linus Berg (Hooli)\n- **Title**: Broken Charging Dock\n- **Priority**: High\n- **Due Date**: 2026-10-02 (Friday)\n- **Status**: Open\n\nLet me know if you need to update or track this ticket further.",
+      "calls": [
+        {
+          "name": "find_contacts",
+          "input": {
+            "query": "Linus Berg"
+          }
+        },
+        {
+          "name": "create_ticket",
+          "input": {
+            "contact_id": 6,
+            "title": "Broken Charging Dock",
+            "priority": "high",
+            "due_date": "2026-10-02"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 3,
+      "durationMs": 45145,
+      "timeToFirstTokenMs": 8516,
+      "prefillTokens": 3155,
+      "outputTokens": 466,
+      "kvReuseRate": 0.6666666666666666,
+      "turns": [
+        {
+          "index": 0,
+          "input": "Create a high priority ticket for Linus Berg about a broken charging dock, due this Friday.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The ticket has been created successfully. Here are the details:\n\n- **Contact**: Linus Berg (Hooli)\n- **Title**: Broken Charging Dock\n- **Priority**: High\n- **Due Date**: 2026-10-02 (Friday)\n- **Status**: Open\n\nLet me know if you need to update or track this ticket further.",
+          "calls": [
+            {
+              "name": "find_contacts",
+              "input": {
+                "query": "Linus Berg"
+              }
+            },
+            {
+              "name": "create_ticket",
+              "input": {
+                "contact_id": 6,
+                "title": "Broken Charging Dock",
+                "priority": "high",
+                "due_date": "2026-10-02"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 3,
+          "durationMs": 45145,
+          "timeToFirstTokenMs": 8516,
+          "prefillTokens": 3155,
+          "outputTokens": 466,
+          "promptChars": 13525,
+          "compacted": false,
+          "kvReuseRate": 0.6666666666666666,
+          "reasoningChars": 1280
+        }
+      ]
+    },
+    {
+      "name": "crm: relative date",
+      "tags": [
+        "skill",
+        "arguments",
+        "dates"
+      ],
+      "repeat": 2,
+      "passed": true,
+      "failures": [],
+      "text": "I have created a high priority ticket for Linus Berg (Hooli) about a broken charging dock, with a due date of 2026-10-02 (Friday). The ticket is now open.\n\nWould you like me to check if any other actions are needed for this ticket?",
+      "calls": [
+        {
+          "name": "find_contacts",
+          "input": {
+            "query": "Linus Berg"
+          }
+        },
+        {
+          "name": "create_ticket",
+          "input": {
+            "contact_id": 6,
+            "title": "Broken Charging Dock",
+            "priority": "high",
+            "due_date": "2026-10-02"
+          }
+        }
+      ],
+      "toolErrors": 0,
+      "steps": 2,
+      "durationMs": 40845,
+      "timeToFirstTokenMs": 8514,
+      "prefillTokens": 3144,
+      "outputTokens": 418,
+      "kvReuseRate": 0.5,
+      "turns": [
+        {
+          "index": 0,
+          "input": "Create a high priority ticket for Linus Berg about a broken charging dock, due this Friday.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "I have created a high priority ticket for Linus Berg (Hooli) about a broken charging dock, with a due date of 2026-10-02 (Friday). The ticket is now open.\n\nWould you like me to check if any other actions are needed for this ticket?",
+          "calls": [
+            {
+              "name": "find_contacts",
+              "input": {
+                "query": "Linus Berg"
+              }
+            },
+            {
+              "name": "create_ticket",
+              "input": {
+                "contact_id": 6,
+                "title": "Broken Charging Dock",
+                "priority": "high",
+                "due_date": "2026-10-02"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 40845,
+          "timeToFirstTokenMs": 8514,
+          "prefillTokens": 3144,
+          "outputTokens": 418,
+          "promptChars": 13305,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 1100
+        }
+      ]
+    },
+    {
+      "name": "conv: correction mid-conversation",
+      "tags": [
+        "multi-turn",
+        "rag",
+        "correction"
+      ],
+      "repeat": 0,
+      "passed": true,
+      "failures": [],
+      "text": "The guest WiFi password for the Berlin office is **linden-river-17**, and visitors must use the public garage at Alexanderplatz for parking since on-site car parking is not available. Secure bike storage is available in the courtyard.",
+      "calls": [],
+      "toolErrors": 0,
+      "steps": 4,
+      "durationMs": 168059,
+      "timeToFirstTokenMs": 9050,
+      "prefillTokens": 12972,
+      "outputTokens": 1630,
+      "kvReuseRate": 0,
+      "turns": [
+        {
+          "index": 0,
+          "input": "What is the guest wifi password?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The guest WiFi password for the Toronto office is **maple-harbor-42**, which rotates on the first business day of each quarter. For the Berlin office, the guest password is **linden-river-17**. Please specify the location if you need confirmation. \n\nThis information is derived from the documents provided in the knowledge base.",
+          "calls": [],
+          "toolErrors": 0,
+          "steps": 1,
+          "durationMs": 92660,
+          "timeToFirstTokenMs": 8707,
+          "prefillTokens": 3142,
+          "outputTokens": 1015,
+          "promptChars": 11894,
+          "compacted": false,
+          "kvReuseRate": 0,
+          "reasoningChars": 4520
+        },
+        {
+          "index": 1,
+          "input": "Sorry, I meant the Berlin office.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The guest WiFi password for the Berlin office is **linden-river-17**. This is explicitly stated in the document under the \"Wifi at the Berlin office\" section [3].",
+          "calls": [],
+          "toolErrors": 0,
+          "steps": 1,
+          "durationMs": 20217,
+          "timeToFirstTokenMs": 9161,
+          "prefillTokens": 3276,
+          "outputTokens": 143,
+          "promptChars": 12485,
+          "compacted": false,
+          "kvReuseRate": 0,
+          "reasoningChars": 464
+        },
+        {
+          "index": 2,
+          "input": "And where can visitors park there?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The Berlin office does not have on-site car parking. Visitors must use the public garage at Alexanderplatz for parking. Secure bike storage is available in the courtyard, but this is separate from car parking. This information is explicitly stated in the \"Parking - Berlin Office\" document [1].",
+          "calls": [],
+          "toolErrors": 0,
+          "steps": 1,
+          "durationMs": 29233,
+          "timeToFirstTokenMs": 9169,
+          "prefillTokens": 3285,
+          "outputTokens": 256,
+          "promptChars": 12542,
+          "compacted": false,
+          "kvReuseRate": 0,
+          "reasoningChars": 988
+        },
+        {
+          "index": 3,
+          "input": "Summarize both of those for a visitor in two sentences.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The guest WiFi password for the Berlin office is **linden-river-17**, and visitors must use the public garage at Alexanderplatz for parking since on-site car parking is not available. Secure bike storage is available in the courtyard.",
+          "calls": [],
+          "toolErrors": 0,
+          "steps": 1,
+          "durationMs": 25949,
+          "timeToFirstTokenMs": 9161,
+          "prefillTokens": 3269,
+          "outputTokens": 216,
+          "promptChars": 12535,
+          "compacted": false,
+          "kvReuseRate": 0,
+          "reasoningChars": 812
+        }
+      ]
+    },
+    {
+      "name": "conv: correction mid-conversation",
+      "tags": [
+        "multi-turn",
+        "rag",
+        "correction"
+      ],
+      "repeat": 1,
+      "passed": true,
+      "failures": [],
+      "text": "The guest WiFi password for the Berlin office is **linden-river-17**. Visitors must use the public garage at Alexanderplatz for parking, as the office does not have on-site car parking.",
+      "calls": [],
+      "toolErrors": 0,
+      "steps": 4,
+      "durationMs": 154701,
+      "timeToFirstTokenMs": 9054,
+      "prefillTokens": 12985,
+      "outputTokens": 1483,
+      "kvReuseRate": 0,
+      "turns": [
+        {
+          "index": 0,
+          "input": "What is the guest wifi password?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The guest WiFi password for the Toronto office is **maple-harbor-42**, which rotates on the first business day of each quarter. For the Berlin office, the guest password is **linden-river-17**. Please specify the location if you need confirmation. \n\nThis information is derived from the documents provided in the knowledge base.",
+          "calls": [],
+          "toolErrors": 0,
+          "steps": 1,
+          "durationMs": 79616,
+          "timeToFirstTokenMs": 8709,
+          "prefillTokens": 3142,
+          "outputTokens": 872,
+          "promptChars": 11894,
+          "compacted": false,
+          "kvReuseRate": 0,
+          "reasoningChars": 3707
+        },
+        {
+          "index": 1,
+          "input": "Sorry, I meant the Berlin office.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The guest WiFi password for the Berlin office is **linden-river-17**. This information is explicitly stated in the document under the \"Wifi at the Berlin office\" section [3].",
+          "calls": [],
+          "toolErrors": 0,
+          "steps": 1,
+          "durationMs": 20274,
+          "timeToFirstTokenMs": 9164,
+          "prefillTokens": 3276,
+          "outputTokens": 144,
+          "promptChars": 12485,
+          "compacted": false,
+          "kvReuseRate": 0,
+          "reasoningChars": 469
+        },
+        {
+          "index": 2,
+          "input": "And where can visitors park there?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "Visitors to the Berlin office cannot park there directly. The document states: \"The Berlin office has no car parking. Visitors can use the public garage at Alexanderplatz.\" [1] \n\nSecure bike storage is available in the courtyard, but this refers to bicycles, not cars. For vehicle parking, use the public garage at Alexanderplatz.",
+          "calls": [],
+          "toolErrors": 0,
+          "steps": 1,
+          "durationMs": 28486,
+          "timeToFirstTokenMs": 9165,
+          "prefillTokens": 3286,
+          "outputTokens": 247,
+          "promptChars": 12554,
+          "compacted": false,
+          "kvReuseRate": 0,
+          "reasoningChars": 875
+        },
+        {
+          "index": 3,
+          "input": "Summarize both of those for a visitor in two sentences.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The guest WiFi password for the Berlin office is **linden-river-17**. Visitors must use the public garage at Alexanderplatz for parking, as the office does not have on-site car parking.",
+          "calls": [],
+          "toolErrors": 0,
+          "steps": 1,
+          "durationMs": 26325,
+          "timeToFirstTokenMs": 9176,
+          "prefillTokens": 3281,
+          "outputTokens": 220,
+          "promptChars": 12583,
+          "compacted": false,
+          "kvReuseRate": 0,
+          "reasoningChars": 866
+        }
+      ]
+    },
+    {
+      "name": "conv: correction mid-conversation",
+      "tags": [
+        "multi-turn",
+        "rag",
+        "correction"
+      ],
+      "repeat": 2,
+      "passed": true,
+      "failures": [],
+      "text": "The guest WiFi password for the Berlin office is **linden-river-17**. Visitors must use the **public garage at Alexanderplatz** for parking, as no vehicle parking is available at the office.",
+      "calls": [],
+      "toolErrors": 0,
+      "steps": 4,
+      "durationMs": 213669,
+      "timeToFirstTokenMs": 9041,
+      "prefillTokens": 12950,
+      "outputTokens": 2091,
+      "kvReuseRate": 0,
+      "turns": [
+        {
+          "index": 0,
+          "input": "What is the guest wifi password?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The guest WiFi password for the Toronto office is **maple-harbor-42**, which rotates on the first business day of each quarter. For the Berlin office, the guest password is **linden-river-17**. \n\nThese details are derived from the documents provided in the knowledge base.",
+          "calls": [],
+          "toolErrors": 0,
+          "steps": 1,
+          "durationMs": 143349,
+          "timeToFirstTokenMs": 8718,
+          "prefillTokens": 3142,
+          "outputTokens": 1538,
+          "promptChars": 11894,
+          "compacted": false,
+          "kvReuseRate": 0,
+          "reasoningChars": 6946
+        },
+        {
+          "index": 1,
+          "input": "Sorry, I meant the Berlin office.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The guest WiFi password for the Berlin office is **linden-river-17**. This information is explicitly stated in the document under the \"Wifi at the Berlin office\" section [3].",
+          "calls": [],
+          "toolErrors": 0,
+          "steps": 1,
+          "durationMs": 20199,
+          "timeToFirstTokenMs": 9154,
+          "prefillTokens": 3267,
+          "outputTokens": 143,
+          "promptChars": 12429,
+          "compacted": false,
+          "kvReuseRate": 0,
+          "reasoningChars": 473
+        },
+        {
+          "index": 2,
+          "input": "And where can visitors park there?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The Berlin office does not have car parking. Visitors must use the **public garage at Alexanderplatz** for parking. Secure bike storage is available in the courtyard, but this is specifically for bicycles, not vehicles. \n\nThis information is explicitly stated in the \"Parking - Berlin Office\" document [1].",
+          "calls": [],
+          "toolErrors": 0,
+          "steps": 1,
+          "durationMs": 25408,
+          "timeToFirstTokenMs": 9164,
+          "prefillTokens": 3277,
+          "outputTokens": 209,
+          "promptChars": 12498,
+          "compacted": false,
+          "kvReuseRate": 0,
+          "reasoningChars": 726
+        },
+        {
+          "index": 3,
+          "input": "Summarize both of those for a visitor in two sentences.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The guest WiFi password for the Berlin office is **linden-river-17**. Visitors must use the **public garage at Alexanderplatz** for parking, as no vehicle parking is available at the office.",
+          "calls": [],
+          "toolErrors": 0,
+          "steps": 1,
+          "durationMs": 24713,
+          "timeToFirstTokenMs": 9126,
+          "prefillTokens": 3264,
+          "outputTokens": 201,
+          "promptChars": 12503,
+          "compacted": false,
+          "kvReuseRate": 0,
+          "reasoningChars": 754
+        }
+      ]
+    },
+    {
+      "name": "conv: analysis that evolves",
+      "tags": [
+        "multi-turn",
+        "sql",
+        "write"
+      ],
+      "repeat": 0,
+      "passed": false,
+      "failures": [
+        "turn 4: error: timed out"
+      ],
+      "text": "",
+      "calls": [
+        {
+          "name": "execute_sql",
+          "input": {
+            "sql": "INSERT INTO orders (id, customer_id, status, ordered_at) VALUES (DEFAULT, (SELECT id FROM customers WHERE name = 'Hiro Silva'), 'delivered', '2026-06-15'); INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (DEFAULT, (SELECT id FROM products WHERE name = 'X300 Scanner'), 2, (SELECT price FROM products WHERE name = 'X300 Scanner'));"
+          }
+        }
+      ],
+      "toolErrors": 1,
+      "steps": 7,
+      "durationMs": 535600,
+      "timeToFirstTokenMs": 9516,
+      "prefillTokens": 13594,
+      "outputTokens": 2810,
+      "kvReuseRate": 0.375,
+      "turns": [
+        {
+          "index": 0,
+          "input": "What was our revenue in June 2026? Exclude cancelled orders.",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The total revenue for June 2026, excluding cancelled orders, was $34,799.00.",
+          "calls": [
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "SELECT SUM(order_items.quantity * order_items.unit_price) AS total_revenue FROM orders JOIN order_items ON orders.id = order_items.order_id WHERE orders.status != 'cancelled' AND orders.ordered_at BETWEEN '2026-06-01' AND '2026-06-30';"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 107587,
+          "timeToFirstTokenMs": 8508,
+          "prefillTokens": 3136,
+          "outputTokens": 1183,
+          "promptChars": 16390,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 4199
+        },
+        {
+          "index": 1,
+          "input": "How does that compare with May?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The total revenue for May 2026, excluding cancelled orders, was $30,020.00. \n\nComparing this to June 2026's $34,799.00, June showed higher revenue than May.",
+          "calls": [
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "SELECT SUM(order_items.quantity * order_items.unit_price) AS total_revenue FROM orders JOIN order_items ON orders.id = order_items.order_id WHERE orders.status != 'cancelled' AND orders.ordered_at BETWEEN '2026-05-01' AND '2026-05-31';"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 60392,
+          "timeToFirstTokenMs": 9122,
+          "prefillTokens": 3310,
+          "outputTokens": 623,
+          "promptChars": 14731,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 1928
+        },
+        {
+          "index": 2,
+          "input": "Which of those two months had more orders?",
+          "graded": true,
+          "passed": true,
+          "failures": [],
+          "text": "The number of orders in May 2026 was 17, and in June 2026 it was 22. Therefore, June 2026 had more orders than May 2026.",
+          "calls": [
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "SELECT COUNT(*) AS order_count FROM orders WHERE status != 'cancelled' AND ordered_at BETWEEN '2026-05-01' AND '2026-05-31';"
+              }
+            },
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "SELECT COUNT(*) AS order_count FROM orders WHERE status != 'cancelled' AND ordered_at BETWEEN '2026-06-01' AND '2026-06-30';"
+              }
+            }
+          ],
+          "toolErrors": 0,
+          "steps": 2,
+          "durationMs": 86646,
+          "timeToFirstTokenMs": 9712,
+          "prefillTokens": 3464,
+          "outputTokens": 886,
+          "promptChars": 16196,
+          "compacted": false,
+          "kvReuseRate": 0.5,
+          "reasoningChars": 2826
+        },
+        {
+          "index": 3,
+          "input": "Record a new delivered order for Hiro Silva dated 2026-06-15: 2 units of the X300 Scanner at the list price.",
+          "graded": true,
+          "passed": false,
+          "failures": [
+            "error: timed out"
+          ],
+          "text": "",
+          "calls": [
+            {
+              "name": "execute_sql",
+              "input": {
+                "sql": "INSERT INTO orders (id, customer_id, status, ordered_at) VALUES (DEFAULT, (SELECT id FROM customers WHERE name = 'Hiro Silva'), 'delivered', '2026-06-15'); INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (DEFAULT, (SELECT id FROM products WHERE name = 'X300 Scanner'), 2, (SELECT price FROM products WHERE name = 'X300 Scanner'));"
+              }
+            }
+          ],
+          "toolErrors": 1,
+          "steps": 1,
+          "durationMs": 280975,
+          "timeToFirstTokenMs": 10721,
+          "prefillTokens": 3684,
+          "outputTokens": 118,
+          "promptChars": 13615,
+          "compacted": false,
+          "kvReuseRate": 0,
+          "reasoningChars": 8837,
+          "reasoningTail": "t in the database, and we need to create them. Let's proceed with that. So, insert into 'customers' table:\n\nINSERT INTO customers (name, email, country, segment, created_at) VALUES ('Hiro Silva', NULL, 'United States', 'enterprise', '2026-06-15');\n\nBut the user hasn't provided email, country, or segment. However, the problem says to record the order, so maybe the customer is already in the system. But without knowing the customer's ID, we can't proceed. Therefore, perhaps the user expects that the customer is already in the database, and we can proceed to create the order. But how to get the customer's ID?\n\nAlternatively, maybe the customer is not in the database, and we need to create them. But the problem doesn't mention creating a customer, so this is a bit of a problem. However, the user's instruction is to record the order, so perhaps the customer is already in the system. Therefore, we can proceed to create the order, assuming the customer exists. But without the customer's ID, we can't. Therefore, maybe the user expects that the customer is already in the system, and the customer's ID is known. But since the user hasn't provided that, perhaps we can proceed to create the order with the customer's ID as a placeholder. But that's not possible. Therefore, perhaps the user expects that the customer is already in the database, and we can proceed to create the order. But without knowing the customer's ID, we can't. Therefore, this is a problem.\n\nAlternatively, maybe the\n\n\n\n\n"
+        }
+      ]
+    }
+  ],
+  "byCase": [
+    {
+      "name": "crm: relative date",
+      "tags": [
+        "skill",
+        "arguments",
+        "dates"
+      ],
+      "passRate": 1,
+      "passed": 3,
+      "runs": 3,
+      "meanMs": 41889,
+      "failures": []
+    },
+    {
+      "name": "conv: correction mid-conversation",
+      "tags": [
+        "multi-turn",
+        "rag",
+        "correction"
+      ],
+      "passRate": 1,
+      "passed": 3,
+      "runs": 3,
+      "meanMs": 178810,
+      "failures": []
+    },
+    {
+      "name": "conv: analysis that evolves",
+      "tags": [
+        "multi-turn",
+        "sql",
+        "write"
+      ],
+      "passRate": 0,
+      "passed": 0,
+      "runs": 1,
+      "meanMs": 535600,
+      "failures": [
+        "turn 4: error: timed out"
+      ]
+    }
+  ],
+  "latency": {
+    "meanMs": 171100,
+    "p50Ms": 154701,
+    "p90Ms": 535600,
+    "ttftP50Ms": 9041
+  },
+  "tokens": {
+    "meanOutput": 1329,
+    "meanPrefill": 8849
+  },
+  "toolErrorRate": 0.038461538461538464,
+  "kvReuseRate": 0.29166666666666663,
+  "laterTurns": {
+    "count": 12,
+    "passRate": 0.9166666666666666,
+    "ttftP50Ms": 9164,
+    "meanPrefillTokens": 3328,
+    "meanPromptChars": 13096,
+    "kvReuseRate": 0.08333333333333333
+  },
+  "stopped": {
+    "reason": "fail-fast: conv: analysis that evolves #0",
+    "ranRuns": 7,
+    "plannedRuns": 9
+  },
+  "config": {
+    "model": "qwen3-4b",
+    "thinking": "auto",
+    "reasoningHistory": "current-turn",
+    "constrainToolCalls": true,
+    "embedding": "auto",
+    "reranker": "auto",
+    "searchMode": null,
+    "repeats": 3,
+    "only": null,
+    "cases": [
+      "crm: relative date",
+      "conv: correction mid-conversation",
+      "conv: analysis that evolves"
+    ],
+    "first": [
+      "crm: relative date",
+      "conv: correction mid-conversation",
+      "conv: analysis that evolves"
+    ],
+    "failFast": true,
+    "ctx": 32768
+  },
+  "environment": {
+    "device": {
+      "webgpu": true,
+      "shaderF16": true,
+      "adapter": {
+        "vendor": "apple",
+        "architecture": "metal-3",
+        "description": ""
+      },
+      "maxStorageBufferMB": 4096,
+      "deviceMemoryGB": 32,
+      "mobile": false,
+      "gpuBudgetMB": 16384,
+      "crossOriginIsolated": false,
+      "storage": {
+        "quotaMB": 12928,
+        "usageMB": 2688,
+        "persisted": true
+      }
+    },
+    "plan": {
+      "llm": {
+        "preset": {
+          "id": "qwen3-4b",
+          "label": "Qwen3 4B",
+          "runtime": "webllm",
+          "model": "Qwen3-4B",
+          "params": "4B",
+          "vramMB": 3432,
+          "kvMBPer4k": 604,
+          "downloadMB": 2300,
+          "contextWindow": 16384,
+          "quality": 80,
+          "thinking": "hybrid"
+        },
+        "modelId": "Qwen3-4B-q4f16_1-MLC",
+        "contextWindow": 16384,
+        "estimatedMB": 5244
+      },
+      "embedding": {
+        "id": "embeddinggemma",
+        "label": "EmbeddingGemma 300M (best quality, 100+ languages)",
+        "model": "onnx-community/embeddinggemma-300m-ONNX",
+        "dimensions": 768,
+        "method": "sentence_embedding",
+        "queryPrefix": "task: search result | query: ",
+        "documentTemplate": "title: {title} | text: {text}",
+        "matryoshka": [
+          768,
+          512,
+          256,
+          128
+        ],
+        "dtype": {
+          "webgpu": "q4",
+          "webgpuF32": "q4",
+          "wasm": "q8"
+        },
+        "downloadMB": 197,
+        "maxTokens": 2048,
+        "languages": "multilingual",
+        "license": "gemma",
+        "searchMode": "vector",
+        "relevanceFloor": 0.35
+      }
+    },
+    "model": "webllm:Qwen3-4B-q4f16_1-MLC",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36"
+  },
+  "commit": "39ca41b",
+  "wallClockSec": 1207
+}

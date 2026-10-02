@@ -224,7 +224,11 @@ export function knowledgeSkill(options: KnowledgeSkillOptions = {}) {
       const latest = users.at(-1)?.content.trim()
       // "Summarize both of those" works on earlier answers, not the documents:
       // retrieved passages would only pull the model off the conversation.
-      if (auto && latest && !OPERATES_ON_CONVERSATION.test(latest)) {
+      if (latest && OPERATES_ON_CONVERSATION.test(latest)) {
+        sections.push(
+          'The latest message asks you to rework your earlier answers in this conversation ("both of those" means the topics of your previous answers). Use those answers; no document search is needed.',
+        )
+      } else if (auto && latest) {
         const hits = await retrieve(knowledge, latest, users.at(-2)?.content.trim())
         if (hits.length) {
           sections.push(

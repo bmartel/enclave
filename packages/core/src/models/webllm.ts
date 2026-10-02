@@ -1,3 +1,4 @@
+import { reasoningLoops } from '../util.js'
 import type { AppConfig, CompletionUsage, InitProgressReport, MLCEngineInterface } from '@mlc-ai/web-llm'
 import type { Downloadable, Model, ToolSpec } from '../types.js'
 import { findLLM } from '../web/catalog.js'
@@ -215,6 +216,8 @@ export function webllm(options: WebLLMOptions): WebLLMModel {
         let output = ''
         let usage: CompletionUsage | undefined
         let reasoningTokens = 0
+        let reasoningText = ''
+        let checkedAt = 0
         let inThink: boolean | undefined // undefined until the reply's opening is seen
         let overBudget = false
         try {
@@ -229,10 +232,16 @@ export function webllm(options: WebLLMOptions): WebLLMModel {
               yield delta
               if (inThink === undefined && output.trimStart().length >= 7) inThink = output.trimStart().startsWith('<think>')
               if (inThink && delta.includes('</think>')) inThink = false
-              // Streamed chunks are single tokens; count those inside <think>.
-              if (thinking && budget > 0 && inThink && ++reasoningTokens > budget) {
-                overBudget = true
-                await engine.interruptGenerate()
+              if (thinking && inThink) {
+                reasoningText += delta
+                // Streamed chunks are single tokens; count those inside <think>.
+                const overTokens = budget > 0 && ++reasoningTokens > budget
+                // Every ~400 characters, check whether the reasoning is looping.
+                const looping = reasoningText.length - checkedAt > 400 && ((checkedAt = reasoningText.length), reasoningLoops(reasoningText))
+                if (overTokens || looping) {
+                  overBudget = true
+                  await engine.interruptGenerate()
+                }
               }
             }
             if (chunk.usage) usage = chunk.usage

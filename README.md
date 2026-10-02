@@ -279,7 +279,9 @@ The agent loop answers a repeated identical tool call from the earlier result in
 
 Small models sometimes announce a call ("I will now call execute_sql with the corrected query") and then end the turn. The loop catches this when tools already ran in the turn: it adds one reminder, a user message marked `synthetic: true` that UIs can hide, and continues.
 
-`dateContext(today)` spells out today and the next two weeks with weekdays, for a skill's `context`. Qwen3 4B got "this Friday" wrong 2 of 3 times when it had to count days itself.
+`dateContext(today)` spells out today, the rest of this week and all of next week, with full weekday names, for a skill's `context`.
+- Qwen3 4B got "this Friday" wrong when it had to count days itself. With a flat list of abbreviated days it still invented a "September 31st".
+- Grouped by week, "this Friday" reads off directly: 3/3 in the evals.
 
 ## WebLLM performance and quality
 
@@ -296,6 +298,8 @@ Enclave's prompt layout, decoding and agent loop are built around how WebLLM act
 - **Thinking budget** (`webllm: { thinkingBudget }`, default 2048 tokens). Past the budget, reasoning is closed and the step is re-asked with thinking off. It exists to stop runaway deliberation, so keep it well above normal reasoning.
   - Qwen3 4B without thinking describes SQL instead of running it. At 1024, the budget cut 17% of SQL turns, and their accuracy dropped.
   - Only 2 of 246 eval turns exceeded 2048 tokens. Cut-off steps report `metrics.thinkingCutOff`.
+  - **Reasoning loops** end thinking early, the same way. A loop is a sentence of 40+ characters appearing 4 times (`reasoningLoops`). In the evals, Qwen3 4B circled "without the customer's id we can't…" for its whole budget.
+  - A looser threshold (25 characters, 3 times) cut normal deliberation. The model then described SQL instead of running it.
 - **Reasoning history** (`webllm: { reasoningHistory }`), measured on 3 conversations × 3 repeats (33 graded later turns):
 
   | Mode | Later turns passed | Time to first token (later turns) | Behaviour |
