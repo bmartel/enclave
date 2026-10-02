@@ -1,4 +1,4 @@
-import { dateContext, defineSkill, tool, type Db } from '@enclave/core'
+import { dateContext, defineSkill, tool, type Db } from 'enclave-ai'
 import { z } from 'zod'
 
 /** The eval world's fixed "today", so relative dates are deterministic. */

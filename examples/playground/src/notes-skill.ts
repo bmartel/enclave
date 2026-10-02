@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { defineSkill, tool } from '@enclave/core'
+import { defineSkill, tool } from 'enclave-ai'
 
 /**
  * Example bespoke skill: its own table, a live context line, a tool that

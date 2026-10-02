@@ -117,7 +117,7 @@ function workerBackend(worker: Worker): Backend {
  *
  * ```ts
  * // ml.worker.ts
- * import { serveTransformers } from '@enclave/core/transformers/worker'
+ * import { serveTransformers } from 'enclave-ai/transformers/worker'
  * serveTransformers()
  * ```
  */

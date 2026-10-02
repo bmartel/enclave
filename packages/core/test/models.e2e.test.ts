@@ -1,6 +1,6 @@
 /**
  * Real-model checks on CPU (onnxruntime-node). Downloads ~1.5 GB on first run.
- *   pnpm --filter @enclave/core test:e2e
+ *   pnpm --filter enclave-ai test:e2e
  */
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'

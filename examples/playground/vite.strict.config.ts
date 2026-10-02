@@ -1,5 +1,5 @@
 import { mergeConfig } from 'vite'
-import { contentSecurityPolicy } from '@enclave/core/privacy'
+import { contentSecurityPolicy } from 'enclave-ai/privacy'
 import base from './vite.config'
 
 /**

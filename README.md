@@ -47,12 +47,12 @@ It distils the ideas of [database.build](https://github.com/supabase-community/d
 
 ## Install
 
-The package is `@enclave/core` (ESM, TypeScript types included). It isn't published to npm yet. Use it from this repository:
+The package is `enclave-ai` (ESM, TypeScript types included). It isn't published to npm yet. Use it from this repository:
 
 ```sh
 git clone https://github.com/bmartel/enclave && cd enclave
 pnpm install
-pnpm --filter @enclave/core build
+pnpm --filter enclave-ai build
 # then, in your app (pnpm/npm/yarn all support local paths):
 pnpm add /path/to/enclave/packages/core zod
 ```
@@ -70,20 +70,20 @@ Heavy work runs off the main thread. Each worker file is one line:
 
 ```ts
 // src/db.worker.ts: PGlite (Postgres + pgvector)
-import { servePGlite } from '@enclave/core/pglite-worker'; servePGlite()
+import { servePGlite } from 'enclave-ai/pglite-worker'; servePGlite()
 
 // src/ml.worker.ts: embeddings, rerankers, Transformers.js models
-import { serveTransformers } from '@enclave/core/transformers/worker'; serveTransformers()
+import { serveTransformers } from 'enclave-ai/transformers/worker'; serveTransformers()
 
 // src/llm.worker.ts: WebLLM
-import { serveWebLLM } from '@enclave/core/models/webllm-worker'; serveWebLLM()
+import { serveWebLLM } from 'enclave-ai/models/webllm-worker'; serveWebLLM()
 ```
 
 ### 2. Create the enclave
 
 ```ts
-import { createWebEnclave } from '@enclave/core/web'
-import { knowledgeSkill, sqlSkill, memorySkill } from '@enclave/core/skills'
+import { createWebEnclave } from 'enclave-ai/web'
+import { knowledgeSkill, sqlSkill, memorySkill } from 'enclave-ai/skills'
 
 const ai = await createWebEnclave({
   workers: {
@@ -155,7 +155,7 @@ Each `send` runs the agent loop: the model sees the system prompt, the skills' i
 createWebEnclave({ llm: 'qwen3-1.7b', ... })      // pick a preset
 await ai.useModel('qwen3-8b')                       // switch at runtime (the old model is unloaded)
 
-import { detectDevice, rankLLMs } from '@enclave/core/web'
+import { detectDevice, rankLLMs } from 'enclave-ai/web'
 rankLLMs(await detectDevice())                      // every preset that fits, best first
 ```
 
@@ -166,7 +166,7 @@ Qwen3 is ranked first because it is trained on the tool-call format enclave uses
 On machines with a capable GPU, a local 27B model is markedly better and about 2.5× faster than the in-browser 4B. Data still stays on the machine: `localhost` counts as `device` locality.
 
 ```ts
-import { discoverLocalModels, recommendOllamaModel, ollama, ollamaEmbedder, lmstudio } from '@enclave/core/models/local'
+import { discoverLocalModels, recommendOllamaModel, ollama, ollamaEmbedder, lmstudio } from 'enclave-ai/models/local'
 
 const found = await discoverLocalModels()          // Ollama (:11434) and LM Studio (:1234); missing servers are skipped
 const pick = recommendOllamaModel(found)            // best measured preset that is installed
@@ -207,8 +207,8 @@ lmstudio({ model: 'qwen/qwen3.6-27b', contextWindow: 32768 })
 ### Remote APIs (opt-in)
 
 ```ts
-import { openaiCompatible } from '@enclave/core/models/openai'
-import { anthropic } from '@enclave/core/models/anthropic'
+import { openaiCompatible } from 'enclave-ai/models/openai'
+import { anthropic } from 'enclave-ai/models/anthropic'
 
 createWebEnclave({ privacy: { allow: 'remote' }, llm: anthropic({ apiKey }) })
 ```
@@ -236,10 +236,10 @@ const { documents, chunks, skipped } = await ai.knowledge!.ingest(
 
 ### Loading files
 
-`@enclave/core/loaders` turns files into documents for `ingest()` and spreadsheets into SQL tables. Parsing runs in the browser like everything else: files never leave the device.
+`enclave-ai/loaders` turns files into documents for `ingest()` and spreadsheets into SQL tables. Parsing runs in the browser like everything else: files never leave the device.
 
 ```ts
-import { ACCEPT, importTable, loadFiles } from '@enclave/core/loaders'
+import { ACCEPT, importTable, loadFiles } from 'enclave-ai/loaders'
 import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'   // Vite; served from your origin
 
 input.accept = ACCEPT
@@ -289,7 +289,7 @@ enclave-mirror --out public/models --ocr eng        # or --ocr eng,deu,fra
 ```
 
 ```ts
-import { loadFiles, tesseractOcr } from '@enclave/core/loaders'
+import { loadFiles, tesseractOcr } from 'enclave-ai/loaders'
 
 const ocr = tesseractOcr({ lib: () => import('tesseract.js'), baseUrl: '/models/ocr', languages: ['eng'] })
 const { documents } = await loadFiles(files, { ocr, pdf })
@@ -425,7 +425,7 @@ A skill packages what the agent needs for one area of your app:
 
 ```ts
 import { z } from 'zod'
-import { defineSkill, tool, dateContext } from '@enclave/core'
+import { defineSkill, tool, dateContext } from 'enclave-ai'
 
 export const invoices = defineSkill({
   name: 'invoices',
@@ -549,7 +549,7 @@ tesseractOcr({ lib: () => import('tesseract.js'), baseUrl: '/models/ocr' })   //
 **3. Browser-enforced lockdown.** Generate a Content-Security-Policy so the browser itself refuses any other connection, from the page and its workers:
 
 ```ts
-import { contentSecurityPolicy, guardNetwork } from '@enclave/core/privacy'
+import { contentSecurityPolicy, guardNetwork } from 'enclave-ai/privacy'
 contentSecurityPolicy({ modelHosts: [] })        // self-hosted: connect-src 'self'
 contentSecurityPolicy({ localServers: true })    // also allow Ollama / LM Studio on localhost
 guardNetwork({ allow: [], onViolation: report }) // runtime defense in depth for fetch/XHR/WebSocket
@@ -604,10 +604,10 @@ Every `step-finish` event reports prefill tokens, cache reuse, prompt size, time
 
 ## Evaluating your agent
 
-`@enclave/core/eval` runs cases against your enclave, in the browser, on your data:
+`enclave-ai/eval` runs cases against your enclave, in the browser, on your data:
 
 ```ts
-import { runEval, formatReport, evalRetrieval, anyOf, numberNear, declines } from '@enclave/core/eval'
+import { runEval, formatReport, evalRetrieval, anyOf, numberNear, declines } from 'enclave-ai/eval'
 
 const report = await runEval(ai, [
   { name: 'wifi', input: 'Guest wifi password?', expect: { answer: 'maple-harbor-42' } },
@@ -666,28 +666,28 @@ Full methodology, per-case history and every report: [`packages/evals`](packages
 
 | Import | Main exports |
 |---|---|
-| `@enclave/core` | `createEnclave`, `defineSkill`, `tool`, `Knowledge`, `dateContext`, `fallback`, `fromTextModel`, `PrivacyError`, types |
-| `@enclave/core/web` | `createWebEnclave`, `browserLLM`, `detectDevice`, `rankLLMs`, `recommendLLM`, `BROWSER_LLMS`, `EMBEDDING_PRESETS`, `RERANKER_PRESETS` |
-| `@enclave/core/skills` | `knowledgeSkill`, `sqlSkill`, `memorySkill`, `looksLikeInjection`, `looksLikeSecret` |
-| `@enclave/core/loaders` | `loadFiles`, `loadFile`, `importTable`, `detectFormat`, `htmlToMarkdown`, `parseCsv`, `tableToText`, `inferType`, `sqlIdentifier`, `ACCEPT`, `UnsupportedFileError`, `tesseractOcr` |
-| `@enclave/core/models/local` | `ollama`, `lmstudio`, `discoverLocalModels`, `recommendOllamaModel`, `ollamaEmbedder`, `localEmbedder`, `localModel`, `OLLAMA_LLM_PRESETS`, `OLLAMA_EMBEDDING_PRESETS` |
-| `@enclave/core/models/webllm` | `webllm`, `selfHostedAppConfig`, `isWebLLMCached`, `deleteWebLLMCache` |
-| `@enclave/core/models/webllm-worker` | `serveWebLLM` |
-| `@enclave/core/transformers` | `transformersEmbedder`, `transformersReranker`, `transformersLLM`, `configureTransformers` |
-| `@enclave/core/transformers/worker` | `serveTransformers` |
-| `@enclave/core/models/openai` | `openaiCompatible` |
-| `@enclave/core/models/anthropic` | `anthropic` |
-| `@enclave/core/models/chrome` | `chromeAI`, `chromeAIAvailable` (Gemini Nano) |
-| `@enclave/core/pglite`, `/pglite-worker` | `createDb`, `createWorkerDb`, `servePGlite` |
-| `@enclave/core/privacy` | `contentSecurityPolicy`, `guardNetwork`, `selfHostedTransformers`, `localityOfUrl` |
-| `@enclave/core/eval` | `runEval`, `formatReport`, `compareReports`, `evalRetrieval`, `wilson`, matchers (`anyOf`, `allOf`, `noneOf`, `numberNear`, `count`, `declines`, `labeled`) |
-| `@enclave/core/testing` | `mockModel`, `hashEmbedder` (fast, deterministic tests) |
+| `enclave-ai` | `createEnclave`, `defineSkill`, `tool`, `Knowledge`, `dateContext`, `fallback`, `fromTextModel`, `PrivacyError`, types |
+| `enclave-ai/web` | `createWebEnclave`, `browserLLM`, `detectDevice`, `rankLLMs`, `recommendLLM`, `BROWSER_LLMS`, `EMBEDDING_PRESETS`, `RERANKER_PRESETS` |
+| `enclave-ai/skills` | `knowledgeSkill`, `sqlSkill`, `memorySkill`, `looksLikeInjection`, `looksLikeSecret` |
+| `enclave-ai/loaders` | `loadFiles`, `loadFile`, `importTable`, `detectFormat`, `htmlToMarkdown`, `parseCsv`, `tableToText`, `inferType`, `sqlIdentifier`, `ACCEPT`, `UnsupportedFileError`, `tesseractOcr` |
+| `enclave-ai/models/local` | `ollama`, `lmstudio`, `discoverLocalModels`, `recommendOllamaModel`, `ollamaEmbedder`, `localEmbedder`, `localModel`, `OLLAMA_LLM_PRESETS`, `OLLAMA_EMBEDDING_PRESETS` |
+| `enclave-ai/models/webllm` | `webllm`, `selfHostedAppConfig`, `isWebLLMCached`, `deleteWebLLMCache` |
+| `enclave-ai/models/webllm-worker` | `serveWebLLM` |
+| `enclave-ai/transformers` | `transformersEmbedder`, `transformersReranker`, `transformersLLM`, `configureTransformers` |
+| `enclave-ai/transformers/worker` | `serveTransformers` |
+| `enclave-ai/models/openai` | `openaiCompatible` |
+| `enclave-ai/models/anthropic` | `anthropic` |
+| `enclave-ai/models/chrome` | `chromeAI`, `chromeAIAvailable` (Gemini Nano) |
+| `enclave-ai/pglite`, `/pglite-worker` | `createDb`, `createWorkerDb`, `servePGlite` |
+| `enclave-ai/privacy` | `contentSecurityPolicy`, `guardNetwork`, `selfHostedTransformers`, `localityOfUrl` |
+| `enclave-ai/eval` | `runEval`, `formatReport`, `compareReports`, `evalRetrieval`, `wilson`, matchers (`anyOf`, `allOf`, `noneOf`, `numberNear`, `count`, `declines`, `labeled`) |
+| `enclave-ai/testing` | `mockModel`, `hashEmbedder` (fast, deterministic tests) |
 
 **Lower level.** Without the web helpers, you can assemble everything yourself:
 
 ```ts
-import { createEnclave } from '@enclave/core'
-import { createDb } from '@enclave/core/pglite'
+import { createEnclave } from 'enclave-ai'
+import { createDb } from 'enclave-ai/pglite'
 const ai = await createEnclave({ db: await createDb({ dataDir: 'memory://' }), model, embedder, skills, privacy: { allow: 'device' } })
 ```
 
@@ -698,7 +698,7 @@ const ai = await createEnclave({ db: await createDb({ dataDir: 'memory://' }), m
 ```sh
 pnpm install
 pnpm test                                     # unit tests: real PGlite + pgvector, scripted model
-pnpm --filter @enclave/core test:e2e          # real weights on CPU (embeddings, reranker, Qwen3 0.6B)
+pnpm --filter enclave-ai test:e2e          # real weights on CPU (embeddings, reranker, Qwen3 0.6B)
 pnpm dev                                      # playground at http://localhost:5173
 pnpm --filter playground dev:strict           # self-hosted models + CSP: zero third-party requests
 pnpm --filter @enclave/evals test             # grader validation (seconds)

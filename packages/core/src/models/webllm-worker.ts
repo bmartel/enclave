@@ -5,7 +5,7 @@ import { WebWorkerMLCEngineHandler } from '@mlc-ai/web-llm'
  *
  * ```ts
  * // llm.worker.ts
- * import { serveWebLLM } from '@enclave/core/models/webllm-worker'
+ * import { serveWebLLM } from 'enclave-ai/models/webllm-worker'
  * serveWebLLM()
  * ```
  */

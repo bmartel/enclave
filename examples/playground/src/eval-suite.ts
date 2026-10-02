@@ -1,5 +1,5 @@
-import type { Enclave } from '@enclave/core'
-import type { EvalCase } from '@enclave/core/eval'
+import type { Enclave } from 'enclave-ai'
+import type { EvalCase } from 'enclave-ai/eval'
 
 export const HANDBOOK = [
   { id: 'wifi', title: 'Wifi', content: 'The guest wifi network is called Visitors and the password is sunflower42. Staff use single sign-on.' },

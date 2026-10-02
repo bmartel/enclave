@@ -1,4 +1,4 @@
-import type { Db } from '@enclave/core'
+import type { Db } from 'enclave-ai'
 
 /** Deterministic PRNG so every seed produces identical data. */
 function mulberry32(seed: number) {

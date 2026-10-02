@@ -1,6 +1,6 @@
-import { formatReport, runEval } from '@enclave/core/eval'
-import { knowledgeSkill, memorySkill, sqlSkill } from '@enclave/core/skills'
-import { browserLLM, createWebEnclave, type ThinkingMode } from '@enclave/core/web'
+import { formatReport, runEval } from 'enclave-ai/eval'
+import { knowledgeSkill, memorySkill, sqlSkill } from 'enclave-ai/skills'
+import { browserLLM, createWebEnclave, type ThinkingMode } from 'enclave-ai/web'
 import { conversations, HANDBOOK, suite } from './eval-suite'
 
 const params = new URLSearchParams(location.search)

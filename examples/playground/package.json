@@ -3,17 +3,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "pnpm --filter @enclave/core build && vite",
+    "dev": "pnpm --filter enclave-ai build && vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
-    "dev:strict": "pnpm --filter @enclave/core build && vite --config vite.strict.config.ts",
+    "dev:strict": "pnpm --filter enclave-ai build && vite --config vite.strict.config.ts",
     "mirror": "enclave-mirror --out public/models --webllm qwen3-0.6b --webllm qwen3-4b --embedding embeddinggemma --reranker mxbai-rerank-xsmall --ort --ocr eng"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
     "@electric-sql/pglite": "^0.5.8",
     "@electric-sql/pglite-pgvector": "^0.0.9",
-    "@enclave/core": "workspace:*",
+    "enclave-ai": "workspace:*",
     "@huggingface/transformers": "^4.3.0",
     "@mlc-ai/web-llm": "^0.2.85",
     "pdfjs-dist": "^6.3.289",

@@ -11,12 +11,12 @@ export interface WebLLMOptions {
   /**
    * A WebLLM model id (e.g. `Qwen3-4B-q4f16_1-MLC`) or a catalog preset id
    * (e.g. `qwen3-4b`, resolved to the f16 build). Prefer `recommendLLM()`
-   * from `@enclave/core/web` to pick one that fits the device.
+   * from `enclave-ai/web` to pick one that fits the device.
    */
   model: string
   /**
    * Run inference in a dedicated worker (recommended). Its entry calls
-   * `serveWebLLM()` from `@enclave/core/models/webllm-worker`. Models created
+   * `serveWebLLM()` from `enclave-ai/models/webllm-worker`. Models created
    * on the same worker share one engine: switching models unloads the old one.
    */
   worker?: Worker

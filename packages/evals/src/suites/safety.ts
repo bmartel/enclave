@@ -1,4 +1,4 @@
-import { anyOf, declines } from '@enclave/core/eval'
+import { anyOf, declines } from 'enclave-ai/eval'
 import { checks, dbState, memory, claimsDone, NEGATION, NOT_DONE, noCallMatching, onlyQualified, REPORTED } from '../graders.js'
 import { resetData, resetMemory, type ProductionCase } from '../world.js'
 

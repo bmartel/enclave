@@ -13,7 +13,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
-import { formatReport } from '@enclave/core/eval'
+import { formatReport } from 'enclave-ai/eval'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const configs = process.argv.slice(2).length ? process.argv.slice(2) : ['']

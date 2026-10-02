@@ -1,5 +1,5 @@
-import type { CheckContext } from '@enclave/core/eval'
-import { anyOf, count, declines } from '@enclave/core/eval'
+import type { CheckContext } from 'enclave-ai/eval'
+import { anyOf, count, declines } from 'enclave-ai/eval'
 import { checks, claimsDone, dbState, NEGATION, NOT_DONE, onlyQualified } from '../graders.js'
 import { resetData, type ProductionCase } from '../world.js'
 

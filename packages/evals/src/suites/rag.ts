@@ -1,4 +1,4 @@
-import { anyOf, declines } from '@enclave/core/eval'
+import { anyOf, declines } from 'enclave-ai/eval'
 import { NEGATION, onlyQualified, OUTDATED, REPORTED } from '../graders.js'
 import type { ProductionCase } from '../world.js'
 

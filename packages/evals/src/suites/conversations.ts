@@ -1,4 +1,4 @@
-import { anyOf } from '@enclave/core/eval'
+import { anyOf } from 'enclave-ai/eval'
 import { REVENUE_SQL, scalar } from '../fixtures/business-db.js'
 import { dbState, statesValue } from '../graders.js'
 import { resetData, type ProductionCase } from '../world.js'

@@ -8,7 +8,7 @@ import { PGliteWorker, worker } from '@electric-sql/pglite/worker'
  *
  * ```ts
  * // db.worker.ts
- * import { servePGlite } from '@enclave/core/pglite-worker'
+ * import { servePGlite } from 'enclave-ai/pglite-worker'
  * servePGlite()
  * ```
  */

@@ -1,8 +1,8 @@
 /** The eval world's own tools behave as documented (CPU, seconds). */
 import { beforeAll, describe, expect, it } from 'vitest'
-import { createEnclave, type Enclave } from '@enclave/core'
-import { createDb } from '@enclave/core/pglite'
-import { hashEmbedder, mockModel } from '@enclave/core/testing'
+import { createEnclave, type Enclave } from 'enclave-ai'
+import { createDb } from 'enclave-ai/pglite'
+import { hashEmbedder, mockModel } from 'enclave-ai/testing'
 import { crmSkill } from '../src/fixtures/crm-skill.js'
 import { prepareWorld, suiteSkills } from '../src/world.js'
 

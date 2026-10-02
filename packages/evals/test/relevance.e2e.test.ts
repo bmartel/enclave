@@ -5,9 +5,9 @@
  */
 import { appendFileSync, writeFileSync } from 'node:fs'
 import { it } from 'vitest'
-import { Knowledge } from '@enclave/core'
-import { createDb } from '@enclave/core/pglite'
-import { transformersEmbedder } from '@enclave/core/transformers'
+import { Knowledge } from 'enclave-ai'
+import { createDb } from 'enclave-ai/pglite'
+import { transformersEmbedder } from 'enclave-ai/transformers'
 import { CORE_MIGRATIONS, migrate } from '../../core/src/store/migrate.js'
 import { FULL_CORPUS } from '../src/fixtures/corpus.js'
 import { CONVERSATIONAL_QUERIES, RETRIEVAL_QUERIES } from '../src/retrieval.js'

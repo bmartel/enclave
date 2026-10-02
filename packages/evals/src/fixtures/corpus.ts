@@ -1,4 +1,4 @@
-import type { IngestDocument } from '@enclave/core'
+import type { IngestDocument } from 'enclave-ai'
 
 /**
  * A realistic internal knowledge base for "Northwind", a company with offices

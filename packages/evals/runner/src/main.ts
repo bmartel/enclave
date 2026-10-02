@@ -1,6 +1,6 @@
-import { formatReport, runEval } from '@enclave/core/eval'
-import { lmstudio, localEmbedder, ollama, ollamaEmbedder, OLLAMA_EMBEDDING_PRESETS } from '@enclave/core/models/local'
-import { createWebEnclave, type ThinkingMode } from '@enclave/core/web'
+import { formatReport, runEval } from 'enclave-ai/eval'
+import { lmstudio, localEmbedder, ollama, ollamaEmbedder, OLLAMA_EMBEDDING_PRESETS } from 'enclave-ai/models/local'
+import { createWebEnclave, type ThinkingMode } from 'enclave-ai/web'
 import { ALL_CASES } from '../../src/suites/index.js'
 import { prepareWorld, suiteSkills } from '../../src/world.js'
 

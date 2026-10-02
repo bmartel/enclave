@@ -40,11 +40,11 @@ export interface WebProgress {
 }
 
 export interface WebWorkers {
-  /** Entry calls `servePGlite()` (`@enclave/core/pglite-worker`). */
+  /** Entry calls `servePGlite()` (`enclave-ai/pglite-worker`). */
   db?: Worker
-  /** Entry calls `serveTransformers()` (`@enclave/core/transformers/worker`). Hosts embeddings, reranker and Transformers.js LLMs. */
+  /** Entry calls `serveTransformers()` (`enclave-ai/transformers/worker`). Hosts embeddings, reranker and Transformers.js LLMs. */
   ml?: Worker
-  /** Entry calls `serveWebLLM()` (`@enclave/core/models/webllm-worker`). */
+  /** Entry calls `serveWebLLM()` (`enclave-ai/models/webllm-worker`). */
   llm?: Worker
 }
 

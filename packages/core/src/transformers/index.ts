@@ -25,7 +25,7 @@ interface CommonOptions {
 /**
  * Point Transformers.js (in `worker`, or this thread) at your own model host
  * and ONNX Runtime WASM. Call before creating embedders/rerankers/LLMs.
- * `selfHostedTransformers()` from `@enclave/core/privacy` builds the settings.
+ * `selfHostedTransformers()` from `enclave-ai/privacy` builds the settings.
  */
 export function configureTransformers(env: import('./runtime.js').TransformersEnv, worker?: Worker): Promise<void> {
   return backendFor(worker).configure(env)

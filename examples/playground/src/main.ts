@@ -1,5 +1,5 @@
-import type { Model, Thread, ToolCall } from '@enclave/core'
-import { chromeAI, chromeAIAvailable } from '@enclave/core/models/chrome'
+import type { Model, Thread, ToolCall } from 'enclave-ai'
+import { chromeAI, chromeAIAvailable } from 'enclave-ai/models/chrome'
 import {
   discoverLocalModels,
   localModel,
@@ -10,9 +10,9 @@ import {
   OLLAMA_EMBEDDING_PRESETS,
   OLLAMA_LLM_PRESETS,
   type LocalModelInfo,
-} from '@enclave/core/models/local'
-import { ACCEPT, importTable, loadFiles, tesseractOcr } from '@enclave/core/loaders'
-import { knowledgeSkill, memorySkill, sqlSkill } from '@enclave/core/skills'
+} from 'enclave-ai/models/local'
+import { ACCEPT, importTable, loadFiles, tesseractOcr } from 'enclave-ai/loaders'
+import { knowledgeSkill, memorySkill, sqlSkill } from 'enclave-ai/skills'
 // pdf.js's worker, bundled and served from this origin.
 import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import {
@@ -25,7 +25,7 @@ import {
   recommendLLM,
   resolveLLM,
   type WebProgress,
-} from '@enclave/core/web'
+} from 'enclave-ai/web'
 import { notesSkill } from './notes-skill'
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T

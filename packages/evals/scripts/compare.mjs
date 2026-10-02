@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Compare two eval reports: pnpm --filter @enclave/evals compare reports/a.json reports/b.json */
 import { readFileSync } from 'node:fs'
-import { compareReports } from '@enclave/core/eval'
+import { compareReports } from 'enclave-ai/eval'
 
 const [a, b] = process.argv.slice(2)
 if (!a || !b) {

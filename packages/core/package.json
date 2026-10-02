@@ -1,5 +1,5 @@
 {
-  "name": "@enclave/core",
+  "name": "enclave-ai",
   "version": "0.1.0",
   "description": "Web-first, offline agent framework: WebLLM + Transformers.js + PGlite/pgvector RAG, with Ollama/LM Studio support and a tight skill API.",
   "keywords": [

@@ -7,10 +7,10 @@
  * Runs on CPU in seconds; no GPU or model download needed.
  */
 import { beforeAll, describe, expect, it } from 'vitest'
-import { createEnclave, type Enclave, type Model, type ModelChunk } from '@enclave/core'
-import { runEval } from '@enclave/core/eval'
-import { createDb } from '@enclave/core/pglite'
-import { hashEmbedder } from '@enclave/core/testing'
+import { createEnclave, type Enclave, type Model, type ModelChunk } from 'enclave-ai'
+import { runEval } from 'enclave-ai/eval'
+import { createDb } from 'enclave-ai/pglite'
+import { hashEmbedder } from 'enclave-ai/testing'
 import { ALL_CASES } from '../src/suites/index.js'
 import { prepareWorld, suiteSkills, type ProductionCase, type RefCall } from '../src/world.js'
 

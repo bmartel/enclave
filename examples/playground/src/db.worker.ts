@@ -1,2 +1,2 @@
-import { servePGlite } from '@enclave/core/pglite-worker'
+import { servePGlite } from 'enclave-ai/pglite-worker'
 servePGlite()

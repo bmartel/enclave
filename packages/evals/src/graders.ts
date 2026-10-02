@@ -1,5 +1,5 @@
-import type { AnswerMatcher, CheckContext } from '@enclave/core/eval'
-import { labeled, numberNear } from '@enclave/core/eval'
+import type { AnswerMatcher, CheckContext } from 'enclave-ai/eval'
+import { labeled, numberNear } from 'enclave-ai/eval'
 import { scalar } from './fixtures/business-db.js'
 
 const sentences = (text: string) => text.split(/(?<=[.!?])\s+|\n+/)

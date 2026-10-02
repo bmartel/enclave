@@ -13,7 +13,7 @@
     "status": "node scripts/status.mjs"
   },
   "dependencies": {
-    "@enclave/core": "workspace:*",
+    "enclave-ai": "workspace:*",
     "zod": "^4.6.5"
   },
   "devDependencies": {

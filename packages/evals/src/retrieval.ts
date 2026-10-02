@@ -1,4 +1,4 @@
-import type { RetrievalCase } from '@enclave/core/eval'
+import type { RetrievalCase } from 'enclave-ai/eval'
 
 export interface LabeledQuery extends RetrievalCase {
   tags: string[]
