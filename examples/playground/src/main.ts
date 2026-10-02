@@ -11,7 +11,7 @@ import {
   OLLAMA_LLM_PRESETS,
   type LocalModelInfo,
 } from '@enclave/core/models/local'
-import { ACCEPT, importTable, loadFiles } from '@enclave/core/loaders'
+import { ACCEPT, importTable, loadFiles, tesseractOcr } from '@enclave/core/loaders'
 import { knowledgeSkill, memorySkill, sqlSkill } from '@enclave/core/skills'
 // pdf.js's worker, bundled and served from this origin.
 import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
@@ -361,6 +361,11 @@ async function refreshCollections() {
   )
 }
 
+// OCR for images and scanned PDFs, when `pnpm mirror` has put tesseract.js under /models/ocr.
+const ocr = (await fetch('/models/ocr/worker.min.js', { method: 'HEAD' }).then((r) => r.ok && !/html/.test(r.headers.get('content-type') ?? ''), () => false))
+  ? tesseractOcr({ lib: () => import('tesseract.js'), baseUrl: '/models/ocr', onProgress: ({ status, progress }) => setStatus(`OCR: ${status} ${Math.round(progress * 100)}%`) })
+  : undefined
+
 async function ingestFiles(files: FileList | File[]) {
   if (!files.length) return
   const started = performance.now()
@@ -369,6 +374,7 @@ async function ingestFiles(files: FileList | File[]) {
     const loaded = await loadFiles(files, {
       collection: 'files',
       pdf: { lib: () => import('pdfjs-dist'), workerSrc: pdfWorkerSrc },
+      ...(ocr ? { ocr } : {}),
       onProgress: ({ done, total, name }) => setStatus(`Reading ${name} (${done}/${total})…`),
     })
     const result = await ai.knowledge!.ingest(loaded.documents, {

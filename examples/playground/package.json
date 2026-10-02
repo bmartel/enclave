@@ -7,7 +7,7 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "dev:strict": "pnpm --filter @enclave/core build && vite --config vite.strict.config.ts",
-    "mirror": "enclave-mirror --out public/models --webllm qwen3-0.6b --webllm qwen3-4b --embedding embeddinggemma --reranker mxbai-rerank-xsmall --ort"
+    "mirror": "enclave-mirror --out public/models --webllm qwen3-0.6b --webllm qwen3-4b --embedding embeddinggemma --reranker mxbai-rerank-xsmall --ort --ocr eng"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
@@ -17,6 +17,7 @@
     "@huggingface/transformers": "^4.3.0",
     "@mlc-ai/web-llm": "^0.2.85",
     "pdfjs-dist": "^6.3.289",
+    "tesseract.js": "^7.0.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {

@@ -7,13 +7,15 @@
  *   <out>/mlc/libs/*.wasm                     WebLLM compiled model libraries
  *   <out>/hf/<repo>/resolve/main/*            Transformers.js models
  *   <out>/ort/*                               ONNX Runtime WASM
+ *   <out>/ocr/{worker.min.js,core/,lang/}     tesseract.js OCR (tesseractOcr({ baseUrl: '<out URL>/ocr' }))
  *
  * Usage:
  *   enclave-mirror --out public/models \
  *     --webllm Qwen3-4B-q4f16_1-MLC \
  *     --hf onnx-community/embeddinggemma-300m-ONNX:q4,q8 \
  *     --hf mixedbread-ai/mxbai-rerank-xsmall-v1:fp32,q8 \
- *     --ort
+ *     --ort \
+ *     --ocr eng,deu
  *
  * Presets from the catalog work too: --webllm qwen3-4b --embedding embeddinggemma --reranker mxbai-rerank-xsmall
  */
@@ -33,13 +35,14 @@ const { values } = parseArgs({
     embedding: { type: 'string', multiple: true, default: [] },
     reranker: { type: 'string', multiple: true, default: [] },
     ort: { type: 'boolean', default: false },
+    ocr: { type: 'string', multiple: true, default: [] },
     'f32': { type: 'boolean', default: false, description: 'Also mirror q4f32 WebLLM builds (GPUs without shader-f16)' },
     help: { type: 'boolean', default: false },
   },
 })
 
-if (values.help || (!values.webllm.length && !values.hf.length && !values.embedding.length && !values.reranker.length && !values.ort)) {
-  console.log((await import('node:fs')).readFileSync(new URL(import.meta.url), 'utf8').split('\n').slice(2, 20).join('\n').replace(/^ \* ?/gm, ''))
+if (values.help || (!values.webllm.length && !values.hf.length && !values.embedding.length && !values.reranker.length && !values.ort && !values.ocr.length)) {
+  console.log((await import('node:fs')).readFileSync(new URL(import.meta.url), 'utf8').split('\n').slice(2, 21).join('\n').replace(/^ \* ?/gm, ''))
   process.exit(values.help ? 0 : 1)
 }
 
@@ -142,6 +145,40 @@ async function mirrorOrt() {
   }
 }
 
+/**
+ * tesseract.js from the app's own install (so the worker matches the version it
+ * imports), its matching WASM core (LSTM engine builds), and gzipped language data.
+ */
+async function mirrorOcr(languages) {
+  console.log(`tesseract.js OCR [${languages.join(', ')}]`)
+  let entry
+  for (const from of [join(process.cwd(), 'package.json'), import.meta.url]) {
+    try {
+      entry = createRequire(from).resolve('tesseract.js')
+      break
+    } catch {
+      /* try the next location */
+    }
+  }
+  if (!entry) throw new Error('tesseract.js is not installed. Add it to your app: pnpm add tesseract.js')
+  const tesseract = packageRoot(entry, 'tesseract.js')
+  const core = packageRoot(createRequire(join(tesseract, 'package.json')).resolve('tesseract.js-core'), 'tesseract.js-core')
+  await mkdir(join(out, 'ocr', 'core'), { recursive: true })
+  await copyFile(join(tesseract, 'dist', 'worker.min.js'), join(out, 'ocr', 'worker.min.js'))
+  console.log(`  ⧉ ${join(out, 'ocr', 'worker.min.js')}`)
+  for (const f of await readdir(core)) {
+    if (!/^tesseract-core(-simd|-relaxedsimd)?-lstm\.wasm\.js$/.test(f)) continue
+    await copyFile(join(core, f), join(out, 'ocr', 'core', f))
+    console.log(`  ⧉ ${join(out, 'ocr', 'core', f)}`)
+  }
+  for (const lang of languages) {
+    await download(
+      `https://cdn.jsdelivr.net/npm/@tesseract.js-data/${lang}/4.0.0_best_int/${lang}.traineddata.gz`,
+      join(out, 'ocr', 'lang', `${lang}.traineddata.gz`),
+    )
+  }
+}
+
 const catalog = await import('../dist/web/catalog.js').catch(() => undefined)
 const presetRepos = [
   ...values.embedding.map((id) => {
@@ -162,4 +199,5 @@ for (const spec of [...values.hf, ...presetRepos]) {
 }
 if (values.webllm.length) await mirrorWebLLM(values.webllm)
 if (values.ort) await mirrorOrt()
+if (values.ocr.length) await mirrorOcr(values.ocr.flatMap((v) => v.split(',')).filter(Boolean))
 console.log(`\nDone. Serve ${out} and pass selfHost: { baseUrl: '<its URL>' } to createWebEnclave().`)

@@ -262,7 +262,7 @@ for (const t of tables) await importTable(ai.db, t, { ifExists: 'replace' })   /
 | HTML | Main content as Markdown; scripts, navigation, footers and hidden elements removed | Nothing |
 | EPUB | Chapters in reading order | Nothing |
 | Markdown, text, code | As-is; Markdown front-matter `title` is used | Nothing |
-| Images, scanned PDFs | Text via your `ocr` function | An OCR engine |
+| Images, scanned PDFs | Text via `tesseractOcr()` (self-hosted tesseract.js) or your own `ocr` function | `tesseract.js` (optional peer dependency) |
 
 Office, EPUB and HTML parsing has no dependencies: a small ZIP reader built on the browser's `DecompressionStream` and a forgiving XML/HTML tokenizer. It works in workers and Node too.
 
@@ -280,14 +280,29 @@ Questions like "what's the total of Ana's approved expenses?" are then answered 
 - `maxBytes`: the per-file limit (default 100 MB).
 - `metadata`: added to every document.
 
-**OCR.** Pass any `(image: Blob) => Promise<string>`. For example, with tesseract.js:
+**OCR.** `tesseractOcr()` reads images and scanned PDF pages with tesseract.js running in a web worker. Serve its files from your own origin. By default tesseract.js downloads its engine and language data from jsdelivr, and `tesseractOcr` refuses to do that unless you pass `cdn: true`.
+
+```sh
+pnpm add tesseract.js
+enclave-mirror --out public/models --ocr eng        # or --ocr eng,deu,fra
+# → public/models/ocr/worker.min.js, core/*.wasm.js (~3.9 MB, one is loaded), lang/eng.traineddata.gz (2.9 MB)
+```
 
 ```ts
-import { createWorker } from 'tesseract.js'
-// Self-host tesseract's worker, core and language files; by default it downloads them from a CDN.
-const ocrWorker = await createWorker('eng', 1, { workerPath: '/ocr/worker.min.js', corePath: '/ocr/', langPath: '/ocr/lang' })
-await loadFiles(files, { ocr: async (image) => (await ocrWorker.recognize(image)).data.text })
+import { loadFiles, tesseractOcr } from '@enclave/core/loaders'
+
+const ocr = tesseractOcr({ lib: () => import('tesseract.js'), baseUrl: '/models/ocr', languages: ['eng'] })
+const { documents } = await loadFiles(files, { ocr, pdf })
+await ocr.terminate()   // optional: frees the engine's memory; it restarts on the next call
 ```
+
+How it works:
+- The engine starts on first use (about 1 second) and is reused.
+- Text with a mean confidence below `minConfidence` (default 30) is dropped as noise.
+- Scanned PDF pages are rendered at 2× scale on an `OffscreenCanvas`, then recognized.
+- Under the strict Content-Security-Policy, OCR loads only from `/models/ocr` and contacts no other origin.
+
+A rendered invoice comes back at 92% confidence in under 200 ms per image on an M2 Max. Any other engine also works: pass your own `(image: Blob) => Promise<string>`.
 
 Without `ocr`, images are skipped. PDF pages with no text layer are reported in `warnings`.
 
@@ -524,10 +539,11 @@ createWebEnclave({ privacy: { allow: 'device' } })   // browser + localhost only
 **2. Self-hosted model files.** By default, weights come from Hugging Face, WebLLM libraries from GitHub, and ONNX Runtime from jsDelivr. These downloads carry no user data, but they reveal the user's IP address and which models you use. Mirror everything to your own origin:
 
 ```sh
-npx enclave-mirror --out public/models --webllm qwen3-4b --embedding embeddinggemma --ort
+npx enclave-mirror --out public/models --webllm qwen3-4b --embedding embeddinggemma --ort --ocr eng
 ```
 ```ts
 createWebEnclave({ selfHost: { baseUrl: '/models' }, ... })
+tesseractOcr({ lib: () => import('tesseract.js'), baseUrl: '/models/ocr' })   // if you read images
 ```
 
 **3. Browser-enforced lockdown.** Generate a Content-Security-Policy so the browser itself refuses any other connection, from the page and its workers:
@@ -653,7 +669,7 @@ Full methodology, per-case history and every report: [`packages/evals`](packages
 | `@enclave/core` | `createEnclave`, `defineSkill`, `tool`, `Knowledge`, `dateContext`, `fallback`, `fromTextModel`, `PrivacyError`, types |
 | `@enclave/core/web` | `createWebEnclave`, `browserLLM`, `detectDevice`, `rankLLMs`, `recommendLLM`, `BROWSER_LLMS`, `EMBEDDING_PRESETS`, `RERANKER_PRESETS` |
 | `@enclave/core/skills` | `knowledgeSkill`, `sqlSkill`, `memorySkill`, `looksLikeInjection`, `looksLikeSecret` |
-| `@enclave/core/loaders` | `loadFiles`, `loadFile`, `importTable`, `detectFormat`, `htmlToMarkdown`, `parseCsv`, `tableToText`, `inferType`, `sqlIdentifier`, `ACCEPT`, `UnsupportedFileError` |
+| `@enclave/core/loaders` | `loadFiles`, `loadFile`, `importTable`, `detectFormat`, `htmlToMarkdown`, `parseCsv`, `tableToText`, `inferType`, `sqlIdentifier`, `ACCEPT`, `UnsupportedFileError`, `tesseractOcr` |
 | `@enclave/core/models/local` | `ollama`, `lmstudio`, `discoverLocalModels`, `recommendOllamaModel`, `ollamaEmbedder`, `localEmbedder`, `localModel`, `OLLAMA_LLM_PRESETS`, `OLLAMA_EMBEDDING_PRESETS` |
 | `@enclave/core/models/webllm` | `webllm`, `selfHostedAppConfig`, `isWebLLMCached`, `deleteWebLLMCache` |
 | `@enclave/core/models/webllm-worker` | `serveWebLLM` |

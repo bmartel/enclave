@@ -19,6 +19,8 @@ export { importTable, inferType, parseCsv, sqlIdentifier, tableToText } from './
 export type { ImportTableOptions, ImportTableResult, TableData } from './tables.js'
 export type { OcrFunction, PdfJsLike, PdfOptions } from './pdf.js'
 export { htmlToMarkdown } from './html.js'
+export { tesseractOcr } from './ocr.js'
+export type { TesseractLike, TesseractOcr, TesseractOcrOptions } from './ocr.js'
 
 export type DocumentFormat = 'text' | 'markdown' | 'html' | 'pdf' | 'docx' | 'pptx' | 'xlsx' | 'epub' | 'csv' | 'json' | 'image'
 

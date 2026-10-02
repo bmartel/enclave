@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { PGlite } from '@electric-sql/pglite'
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs'
-import { detectFormat, htmlToMarkdown, importTable, inferType, loadFile, loadFiles, parseCsv, sqlIdentifier, UnsupportedFileError } from '../src/loaders/index.js'
+import { detectFormat, htmlToMarkdown, importTable, inferType, loadFile, loadFiles, parseCsv, sqlIdentifier, tesseractOcr, UnsupportedFileError } from '../src/loaders/index.js'
 import { readZip } from '../src/loaders/zip.js'
 import { Knowledge } from '../src/rag/knowledge.js'
 import { CORE_MIGRATIONS, migrate } from '../src/store/migrate.js'
@@ -491,5 +491,53 @@ describe('loadFile and loadFiles', () => {
     expect(hits[0]?.title).toBe('Employee Handbook 2026')
     expect((await kb.ingest(documents)).skipped).toBe(2)
     await db.close()
+  })
+})
+
+describe('tesseractOcr', () => {
+  function fakeTesseract(confidence = 90) {
+    const calls = { created: [] as unknown[][], recognized: 0, terminated: 0 }
+    const lib = {
+      createWorker: async (...args: unknown[]) => {
+        calls.created.push(args)
+        return {
+          recognize: async () => (calls.recognized++, { data: { text: '  Invoice total: $42.10\n', confidence } }),
+          terminate: async () => void calls.terminated++,
+        }
+      },
+    }
+    return { lib, calls }
+  }
+
+  it('uses self-hosted files and starts one engine on first use', async () => {
+    const { lib, calls } = fakeTesseract()
+    const ocr = tesseractOcr({ lib: async () => lib, baseUrl: '/models/ocr/', languages: ['eng', 'deu'] })
+    expect(calls.created).toHaveLength(0)
+    const [a, b] = await Promise.all([ocr(new Blob(['x']), { name: 'a.png' }), ocr(new Blob(['y']), { name: 'b.png' })])
+    expect([a, b]).toEqual(['Invoice total: $42.10', 'Invoice total: $42.10'])
+    expect(calls.created).toEqual([[['eng', 'deu'], 1, { workerPath: '/models/ocr/worker.min.js', corePath: '/models/ocr/core', langPath: '/models/ocr/lang' }]])
+    await ocr.terminate()
+    expect(calls.terminated).toBe(1)
+    await ocr(new Blob(['z']), { name: 'c.png' })
+    expect(calls.created).toHaveLength(2)
+  })
+
+  it('refuses the CDN unless asked', () => {
+    const { lib } = fakeTesseract()
+    expect(() => tesseractOcr({ lib })).toThrow(/enclave-mirror .*--ocr eng/)
+    expect(() => tesseractOcr({ lib, workerPath: '/w.js', corePath: '/core' })).toThrow(/missing langPath/)
+    expect(() => tesseractOcr({ lib, cdn: true })).not.toThrow()
+  })
+
+  it('drops low-confidence noise', async () => {
+    const { lib } = fakeTesseract(12)
+    expect(await tesseractOcr({ lib, baseUrl: '/ocr' })(new Blob(['x']), { name: 'noise.png' })).toBe('')
+  })
+
+  it('reads images through loadFile', async () => {
+    const { lib } = fakeTesseract()
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    const loaded = await loadFile(file('invoice.png', png), { ocr: tesseractOcr({ lib, baseUrl: '/ocr' }) })
+    expect(loaded.documents[0]).toMatchObject({ title: 'invoice', content: 'Invoice total: $42.10', metadata: { format: 'image', ocr: true } })
   })
 })
