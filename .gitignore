@@ -3,3 +3,5 @@ dist
 .DS_Store
 *.tsbuildinfo
 examples/playground/public/models
+packages/core/README.md
+packages/core/LICENSE

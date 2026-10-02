@@ -707,6 +707,21 @@ pnpm --filter @enclave/evals eval             # production evals on WebGPU (hour
 
 The playground picks a measured local model (Ollama or LM Studio) when one is installed, and otherwise the best in-browser model. It shows device detection, a model picker with cache state, downloads, document upload, threads and streaming chat with inline approvals.
 
+### Releasing
+
+```sh
+cd packages/core
+npm version patch                 # or minor / prerelease --preid beta
+npm publish --dry-run             # build, typecheck and tests run first; check the file list
+npm publish                       # add --tag next for prereleases
+```
+
+What `npm publish` does:
+- `prepublishOnly` builds, typechecks and runs the unit tests.
+- `prepack` copies the repository README (with relative links made absolute) and LICENSE into the package.
+
+The tarball contains `dist`, the `enclave-mirror` CLI, and `src` for source maps: about 285 kB.
+
 ## Status and limitations
 
 - **Pre-1.0.** APIs may change. Not yet published to npm.
