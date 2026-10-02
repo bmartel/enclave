@@ -1,7 +1,7 @@
 {
   "name": "enclave-ai",
   "version": "0.1.0",
-  "description": "Web-first, offline agent framework: WebLLM + Transformers.js + PGlite/pgvector RAG, with Ollama/LM Studio support and a tight skill API.",
+  "description": "AI agents that run in your user's browser: answers from documents, SQL over local data, and your own tools, with nothing sent to a server.",
   "keywords": [
     "ai",
     "agent",
