@@ -234,6 +234,70 @@ const { documents, chunks, skipped } = await ai.knowledge!.ingest(
 - **Collections:** documents can be grouped into collections (`handbook`, `tickets`…), and searches can target one or several.
 - **Other operations:** `remove(id)`, `clear(collection)`, `collections()`, `reindex()`.
 
+### Loading files
+
+`@enclave/core/loaders` turns files into documents for `ingest()` and spreadsheets into SQL tables. Parsing runs in the browser like everything else: files never leave the device.
+
+```ts
+import { ACCEPT, importTable, loadFiles } from '@enclave/core/loaders'
+import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'   // Vite; served from your origin
+
+input.accept = ACCEPT
+const { documents, tables, warnings, errors } = await loadFiles(input.files, {
+  collection: 'uploads',
+  pdf: { lib: () => import('pdfjs-dist'), workerSrc: pdfWorkerSrc },
+})
+await ai.knowledge!.ingest(documents)
+for (const t of tables) await importTable(ai.db, t, { ifExists: 'replace' })   // spreadsheets → SQL
+```
+
+| Format | What's kept | Needs |
+|---|---|---|
+| PDF | Headings (by font size), paragraphs, lists, simple tables; running headers, footers and page numbers removed; hyphenation joined | `pdfjs-dist` (optional peer dependency) |
+| Word `.docx` | Headings (styles, or font size in hand-formatted files), numbered and bulleted lists, tables; tracked deletions and field codes dropped | Nothing |
+| PowerPoint `.pptx` | One section per slide in presentation order: title, bullets, tables, speaker notes | Nothing |
+| Excel `.xlsx` | Every sheet as a table with dates, booleans and numbers as shown in Excel | Nothing |
+| CSV / TSV | Quoted fields, delimiter detection, UTF-8 or Windows-1252 | Nothing |
+| JSON / JSONL | Arrays of records become tables; other JSON becomes readable `key: value` text | Nothing |
+| HTML | Main content as Markdown; scripts, navigation, footers and hidden elements removed | Nothing |
+| EPUB | Chapters in reading order | Nothing |
+| Markdown, text, code | As-is; Markdown front-matter `title` is used | Nothing |
+| Images, scanned PDFs | Text via your `ocr` function | An OCR engine |
+
+Office, EPUB and HTML parsing has no dependencies: a small ZIP reader built on the browser's `DecompressionStream` and a forgiving XML/HTML tokenizer. It works in workers and Node too.
+
+**Tables, two ways.** Spreadsheet, CSV and JSON-array rows are added to the documents as one self-describing line per row (`Region: West; Revenue: 1200`), so they're searchable. That covers the first 2,000 rows (`maxTextRows`). `importTable()` also creates a typed Postgres table:
+- Column types are inferred: integer, numeric, boolean, date, timestamp, or text. Leading zeros stay text.
+- Column names become snake_case and avoid reserved words.
+- `COMMENT ON` records where the table came from, which `sqlSkill` shows the model.
+
+Questions like "what's the total of Ana's approved expenses?" are then answered with SQL, not by reading rows.
+
+**Options:**
+- `pdfSplit: 'page'`: one document per PDF page (`id: 'file.pdf#page=4'`), so citations name the page.
+- `slideNotes: false`: skip speaker notes.
+- `tablesAsText: false`: keep tables only for SQL.
+- `maxBytes`: the per-file limit (default 100 MB).
+- `metadata`: added to every document.
+
+**OCR.** Pass any `(image: Blob) => Promise<string>`. For example, with tesseract.js:
+
+```ts
+import { createWorker } from 'tesseract.js'
+// Self-host tesseract's worker, core and language files; by default it downloads them from a CDN.
+const ocrWorker = await createWorker('eng', 1, { workerPath: '/ocr/worker.min.js', corePath: '/ocr/', langPath: '/ocr/lang' })
+await loadFiles(files, { ocr: async (image) => (await ocrWorker.recognize(image)).data.text })
+```
+
+Without `ocr`, images are skipped. PDF pages with no text layer are reported in `warnings`.
+
+**Errors.** `loadFiles` keeps going past unreadable files and lists them in `errors`. Legacy `.doc`/`.xls`/`.ppt` files get a "save as .docx" message.
+
+**Limits.**
+- PDF reconstruction is heuristic. Multi-column layouts, complex tables and text drawn as vector shapes may come out imperfectly.
+- Password-protected PDFs need `pdf.password`.
+- Some CJK PDFs need pdf.js's CMaps (`pdf.cMapUrl`). Self-host them for offline use.
+
 ### How the agent uses documents
 
 `knowledgeSkill()` gives the agent two paths to your documents:
@@ -589,6 +653,7 @@ Full methodology, per-case history and every report: [`packages/evals`](packages
 | `@enclave/core` | `createEnclave`, `defineSkill`, `tool`, `Knowledge`, `dateContext`, `fallback`, `fromTextModel`, `PrivacyError`, types |
 | `@enclave/core/web` | `createWebEnclave`, `browserLLM`, `detectDevice`, `rankLLMs`, `recommendLLM`, `BROWSER_LLMS`, `EMBEDDING_PRESETS`, `RERANKER_PRESETS` |
 | `@enclave/core/skills` | `knowledgeSkill`, `sqlSkill`, `memorySkill`, `looksLikeInjection`, `looksLikeSecret` |
+| `@enclave/core/loaders` | `loadFiles`, `loadFile`, `importTable`, `detectFormat`, `htmlToMarkdown`, `parseCsv`, `tableToText`, `inferType`, `sqlIdentifier`, `ACCEPT`, `UnsupportedFileError` |
 | `@enclave/core/models/local` | `ollama`, `lmstudio`, `discoverLocalModels`, `recommendOllamaModel`, `ollamaEmbedder`, `localEmbedder`, `localModel`, `OLLAMA_LLM_PRESETS`, `OLLAMA_EMBEDDING_PRESETS` |
 | `@enclave/core/models/webllm` | `webllm`, `selfHostedAppConfig`, `isWebLLMCached`, `deleteWebLLMCache` |
 | `@enclave/core/models/webllm-worker` | `serveWebLLM` |
@@ -631,4 +696,5 @@ The playground picks a measured local model (Ollama or LM Studio) when one is in
 - **Pre-1.0.** APIs may change. Not yet published to npm.
 - **Where it's verified:** Chrome with WebGPU on Apple silicon, plus Node for the unit and CPU end-to-end tests. Windows/Linux GPUs, mobile browsers and Chrome built-in AI are untested.
 - **In-browser model limits:** Qwen3 4B is strong for its size but still slips occasionally on SQL details and long multi-step writes. Use a local 27B model for heavier workloads.
+- **File parsing:** PDF text extraction is heuristic (see [Loading files](#loading-files)). Legacy binary Office formats aren't supported.
 - **First-visit download:** 2–3 GB for the default in-browser model. Show progress (`onProgress`) and cache state (`modelCache`).

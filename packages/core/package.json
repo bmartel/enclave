@@ -73,6 +73,10 @@
     "./privacy": {
       "types": "./dist/privacy/index.d.ts",
       "default": "./dist/privacy/index.js"
+    },
+    "./loaders": {
+      "types": "./dist/loaders/index.d.ts",
+      "default": "./dist/loaders/index.js"
     }
   },
   "scripts": {
@@ -84,10 +88,11 @@
   "peerDependencies": {
     "@anthropic-ai/sdk": ">=0.100.0",
     "@electric-sql/pglite": ">=0.5.0",
+    "@electric-sql/pglite-pgvector": ">=0.0.9",
     "@huggingface/transformers": ">=4.0.0",
     "@mlc-ai/web-llm": ">=0.2.80",
     "zod": "^4.0.0",
-    "@electric-sql/pglite-pgvector": ">=0.0.9"
+    "pdfjs-dist": ">=4.0.0"
   },
   "peerDependenciesMeta": {
     "@anthropic-ai/sdk": {
@@ -98,6 +103,9 @@
     },
     "@mlc-ai/web-llm": {
       "optional": true
+    },
+    "pdfjs-dist": {
+      "optional": true
     }
   },
   "devDependencies": {
@@ -107,6 +115,7 @@
     "@huggingface/transformers": "^4.3.0",
     "@mlc-ai/web-llm": "^0.2.85",
     "@types/node": "^26.6.3",
+    "pdfjs-dist": "^6.3.289",
     "typescript": "^7.0.2",
     "vitest": "^5.0.2",
     "zod": "^4.6.5"

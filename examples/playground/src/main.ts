@@ -11,7 +11,10 @@ import {
   OLLAMA_LLM_PRESETS,
   type LocalModelInfo,
 } from '@enclave/core/models/local'
+import { ACCEPT, importTable, loadFiles } from '@enclave/core/loaders'
 import { knowledgeSkill, memorySkill, sqlSkill } from '@enclave/core/skills'
+// pdf.js's worker, bundled and served from this origin.
+import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import {
   BROWSER_LLMS,
   EMBEDDING_PRESETS,
@@ -360,16 +363,31 @@ async function refreshCollections() {
 
 async function ingestFiles(files: FileList | File[]) {
   if (!files.length) return
-  const docs = await Promise.all(
-    [...files].map(async (f) => ({ title: f.name, source: f.name, content: await f.text(), collection: 'files' })),
-  )
   const started = performance.now()
   try {
-    const result = await ai.knowledge!.ingest(docs, {
+    // PDF, Word, PowerPoint, Excel, EPUB, HTML, CSV, JSON and text, all read in this tab.
+    const loaded = await loadFiles(files, {
+      collection: 'files',
+      pdf: { lib: () => import('pdfjs-dist'), workerSrc: pdfWorkerSrc },
+      onProgress: ({ done, total, name }) => setStatus(`Reading ${name} (${done}/${total})…`),
+    })
+    const result = await ai.knowledge!.ingest(loaded.documents, {
       onProgress: ({ done, total }) => setStatus(`Indexing ${done}/${total}…`),
     })
+    // Spreadsheets and CSVs also become SQL tables, so the agent can total and filter them.
+    const imported: string[] = []
+    for (const table of loaded.tables) {
+      const { table: name, rows } = await importTable(ai.db, table, { ifExists: 'replace' })
+      imported.push(`${name} (${rows} rows)`)
+    }
+    const notes = [
+      ...loaded.warnings,
+      ...loaded.errors.map((e) => e.error.message),
+      ...(imported.length ? [`Tables: ${imported.join(', ')}`] : []),
+    ]
     setStatus(
-      `Indexed ${result.documents} docs (${result.chunks} chunks, ${result.skipped} unchanged) in ${Math.round(performance.now() - started)} ms`,
+      `Indexed ${result.documents} docs (${result.chunks} chunks, ${result.skipped} unchanged) in ${Math.round(performance.now() - started)} ms` +
+        (notes.length ? `. ${notes.join(' ')}` : ''),
     )
   } catch (error) {
     setStatus(`Indexing failed: ${error instanceof Error ? error.message : String(error)}`)
@@ -377,6 +395,7 @@ async function ingestFiles(files: FileList | File[]) {
   await refreshCollections()
 }
 
+$<HTMLInputElement>('files').accept = ACCEPT
 $<HTMLInputElement>('files').onchange = (e) => ingestFiles((e.target as HTMLInputElement).files!)
 const drop = $('drop')
 drop.ondragover = (e) => (e.preventDefault(), drop.classList.add('over'))
