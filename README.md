@@ -1,23 +1,9 @@
 # enclave
 
-A web-first, offline agent framework. The LLM, embeddings, reranker, vector index, database and conversation history all run in the user's browser. Drop it into an existing web app to add an agent with private RAG and your own skills; no data has to leave the device.
-
-It builds on [database.build](https://github.com/supabase-community/database-build) (Postgres in the browser via PGlite, pgvector, in-browser embeddings, an LLM that drives SQL through tools) and turns those pieces into a library built around WebLLM and Transformers.js. Local servers (Ollama, LM Studio) are supported as an option.
+**Private, offline AI agents for web apps.** The language model, embeddings, vector search, a Postgres database and conversation history all run inside the user's browser. Nothing has to leave the device. Add an agent that answers questions from your documents, works with your data and calls your own app's functions, without a backend AI service.
 
 ```ts
-import { createWebEnclave } from '@enclave/core/web'
-import { knowledgeSkill, sqlSkill } from '@enclave/core/skills'
-
-const ai = await createWebEnclave({
-  workers: {
-    db: new Worker(new URL('./db.worker.ts', import.meta.url), { type: 'module' }),
-    ml: new Worker(new URL('./ml.worker.ts', import.meta.url), { type: 'module' }),
-    llm: new Worker(new URL('./llm.worker.ts', import.meta.url), { type: 'module' }),
-  },
-  skills: [knowledgeSkill(), sqlSkill()],
-  onProgress: (p) => console.log(p.stage, p.text),
-})
-
+const ai = await createWebEnclave({ workers, skills: [knowledgeSkill(), sqlSkill()] })
 await ai.knowledge!.ingest({ title: 'Handbook', content: handbookText })
 
 for await (const event of ai.thread('support').send('What is the guest wifi password?')) {
@@ -25,190 +11,342 @@ for await (const event of ai.thread('support').send('What is the guest wifi pass
 }
 ```
 
-Each worker file is one line:
+- **Runs in the browser.** WebLLM (WebGPU) or Transformers.js (WASM) for the model, PGlite (Postgres 17 + pgvector) for storage and search, all in workers.
+- **Private RAG.** Ingest documents; the agent retrieves, cites and answers. Search is hybrid (vector plus keyword), and retrieved text is treated as untrusted.
+- **Skills.** Typed tools (Zod) with approvals, their own tables and live context. They call straight into your app.
+- **Built-in skills.** Documents (`knowledgeSkill`), SQL over the in-browser database (`sqlSkill`) and long-term memory (`memorySkill`).
+- **Local servers too.** Ollama and LM Studio, with measured model presets. OpenAI-compatible endpoints and Claude are available when you opt in.
+- **Privacy you can enforce.** A locality policy, self-hosted model files and a Content-Security-Policy generator, so the browser itself blocks third-party connections.
+- **Measured.** A 65-case production eval suite runs against the real models. The in-browser Qwen3 4B scores 95%; local 27B models score 98.5–99.5%. See [Benchmarks](#benchmarks).
+
+It distils the ideas of [database.build](https://github.com/supabase-community/database-build) into a library: Postgres in the browser, in-browser embeddings, and an LLM that acts through tools.
+
+---
+
+## Contents
+
+- [Install](#install)
+- [Quick start](#quick-start)
+- [Concepts](#concepts)
+- [Choosing where the model runs](#choosing-where-the-model-runs)
+- [Documents and private RAG](#documents-and-private-rag)
+- [The database and SQL](#the-database-and-sql)
+- [Memory](#memory)
+- [Writing skills](#writing-skills)
+- [Building the UI](#building-the-ui)
+- [Privacy and security](#privacy-and-security)
+- [Downloads and offline use](#downloads-and-offline-use)
+- [Tuning WebLLM](#tuning-webllm)
+- [Evaluating your agent](#evaluating-your-agent)
+- [Benchmarks](#benchmarks)
+- [API reference](#api-reference)
+- [Development](#development)
+- [Status and limitations](#status-and-limitations)
+
+---
+
+## Install
+
+The package is `@enclave/core` (ESM, TypeScript types included). It isn't published to npm yet. Use it from this repository:
+
+```sh
+git clone https://github.com/bmartel/enclave && cd enclave
+pnpm install
+pnpm --filter @enclave/core build
+# then, in your app (pnpm/npm/yarn all support local paths):
+pnpm add /path/to/enclave/packages/core zod
+```
+
+Requirements:
+- **Browser:** Chrome or Edge 121+ with WebGPU for in-browser models. Without WebGPU, small Transformers.js models run on WASM.
+- **Bundler:** any that supports module workers via `new URL('./x.worker.ts', import.meta.url)`. Vite works out of the box.
+- **Headers (recommended):** serve with `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`, to enable multi-threaded WASM.
+
+## Quick start
+
+### 1. Create the three workers
+
+Heavy work runs off the main thread. Each worker file is one line:
 
 ```ts
-// db.worker.ts
+// src/db.worker.ts: PGlite (Postgres + pgvector)
 import { servePGlite } from '@enclave/core/pglite-worker'; servePGlite()
-// ml.worker.ts   (embeddings, reranker, Transformers.js LLMs)
+
+// src/ml.worker.ts: embeddings, rerankers, Transformers.js models
 import { serveTransformers } from '@enclave/core/transformers/worker'; serveTransformers()
-// llm.worker.ts  (WebLLM)
+
+// src/llm.worker.ts: WebLLM
 import { serveWebLLM } from '@enclave/core/models/webllm-worker'; serveWebLLM()
 ```
 
-## What runs where
-
-| Layer | Default | Runs on |
-|---|---|---|
-| LLM | [WebLLM](https://github.com/mlc-ai/web-llm) (Qwen3 4B on typical desktops) | WebGPU, in a worker |
-| LLM fallback | [Transformers.js](https://huggingface.co/docs/transformers.js) v4 (Qwen3 0.6B) | WASM, when there is no WebGPU |
-| Embeddings | EmbeddingGemma 300M (GPU) / Granite Embedding 97M multilingual R2 (CPU) | WebGPU → WASM, in a worker |
-| Reranker | mxbai-rerank xsmall (cross-encoder) | Same worker |
-| Database + vectors | [PGlite](https://pglite.dev) (Postgres 17) + pgvector HNSW + full-text | Worker, IndexedDB or OPFS |
-| Agent loop, skills, threads | This library | Main thread |
-
-`createWebEnclave` profiles the device (WebGPU, `shader-f16`, buffer limits, memory) and picks the best models that fit it. You can override every choice.
-
-## Privacy by construction
-
-Three layers make "no data leaves the device" something the browser enforces, not just a promise:
-
-**1. Locality policy.** Every model, embedder and reranker declares where it processes data: `device` (browser, or a loopback server), `local-network` (private addresses) or `remote`. An enclave refuses components beyond its policy, including on `setModel`. The default is `local-network`, so internet APIs require an explicit opt-in:
+### 2. Create the enclave
 
 ```ts
-createWebEnclave({ privacy: { allow: 'device' } })     // strictest: browser + localhost only
-ai.setModel(anthropic({ apiKey }))                     // throws PrivacyError unless allow: 'remote'
+import { createWebEnclave } from '@enclave/core/web'
+import { knowledgeSkill, sqlSkill, memorySkill } from '@enclave/core/skills'
+
+const ai = await createWebEnclave({
+  workers: {
+    db: new Worker(new URL('./db.worker.ts', import.meta.url), { type: 'module' }),
+    ml: new Worker(new URL('./ml.worker.ts', import.meta.url), { type: 'module' }),
+    llm: new Worker(new URL('./llm.worker.ts', import.meta.url), { type: 'module' }),
+  },
+  skills: [knowledgeSkill(), sqlSkill(), memorySkill()],
+  onProgress: (p) => showProgress(p.stage, p.text, p.progress),   // model downloads, indexing
+})
+
+console.log(ai.device, ai.plan)   // what was detected, which models were chosen
 ```
 
-**2. Self-hosted model files.** By default the browser downloads weights from Hugging Face, WebLLM's compiled libraries from GitHub, and ONNX Runtime from jsDelivr. These are GET requests with no user data, but they reveal the user's IP address and which models the app uses, and they create a runtime dependency. Mirror everything to your own host once:
+`createWebEnclave` profiles the device (WebGPU, `shader-f16`, GPU memory) and picks the best chat model, embedder and storage that fit. Everything can be overridden.
 
-```sh
-npx enclave-mirror --out public/models \
-  --webllm qwen3-4b --embedding embeddinggemma --reranker mxbai-rerank-xsmall --ort
-```
+The chat model (2.3 GB for Qwen3 4B) downloads on the first message, or during setup with `preloadLLM: true`. After that it loads from the browser cache, offline.
+
+### 3. Add documents and chat
 
 ```ts
-createWebEnclave({ selfHost: { baseUrl: '/models' }, ... })
+await ai.knowledge!.ingest([
+  { title: 'Wifi', content: 'Guest network: NorthGuest. Password: maple-harbor-42.', source: 'it/wifi.md' },
+  { title: 'Expenses', content: expensesPolicyText, source: 'finance/expenses.md' },
+])
+
+const thread = ai.thread('support')                       // persisted in the browser database
+for await (const e of thread.send('What is the guest wifi password?')) {
+  if (e.type === 'text-delta') append(e.delta)
+}
+
+// Or just the final answer:
+const answer = await ai.thread().send('Create a table of my books and add three classics').text()
 ```
 
-**3. Browser-enforced lockdown.** Serve a Content-Security-Policy so the browser itself refuses any other connection (it applies to workers too), and optionally wrap `fetch`/XHR/WebSocket/beacons at runtime:
+That's a working private agent: document Q&A with citations, SQL in the browser, and memory across conversations.
 
-```ts
-import { contentSecurityPolicy, guardNetwork } from '@enclave/core/privacy'
+A complete example app lives in [`examples/playground`](examples/playground). It has a model picker, downloads, document upload, streaming chat with inline approvals, and evals.
 
-contentSecurityPolicy({ modelHosts: [] })   // self-hosted: connect-src 'self' only
-contentSecurityPolicy({ localServers: true }) // also allow Ollama / LM Studio on localhost
-guardNetwork({ allow: [], onViolation: (url) => report(url) })  // defense in depth, per page/worker
-```
+## Concepts
 
-Data at rest (the PGlite database, threads, the vector index, model caches) lives in the origin's IndexedDB/OPFS on the user's device. `createWebEnclave` requests persistent storage so the browser doesn't evict it.
+| Concept | What it is |
+|---|---|
+| **Enclave** (`ai`) | The agent runtime: model, database, knowledge base, skills, privacy policy. |
+| **Thread** | A persisted conversation. `ai.thread(id)` resumes one; `ai.threads()` lists them. |
+| **Skill** | A unit of capability: instructions, typed tools, optional tables and live context. |
+| **Tool** | A typed function the model can call. Inputs are validated with Zod, and the tool can require user approval. |
+| **Knowledge** | The document store: chunking, embeddings, hybrid search, optional reranking. |
+| **Model / Embedder / Reranker** | Swappable components. Each declares its **locality** (`device`, `local-network`, `remote`), and the privacy policy enforces it. |
 
-## Choosing models
+Each `send` runs the agent loop: the model sees the system prompt, the skills' instructions, live context (database schema, retrieved passages, memories) and the conversation. It either answers or calls tools; tool results go back to it, and it continues until it answers. Everything streams as typed events.
 
-### Browser LLMs
+## Choosing where the model runs
 
-`BROWSER_LLMS` in `@enclave/core/web` is a curated catalog. `recommendLLM(device)` picks from it:
+### In the browser (default)
 
-- **Fit.** It uses WebLLM's measured VRAM figures plus an estimate of KV-cache growth, and chooses `q4f16` builds when the GPU supports `shader-f16`, `q4f32` otherwise.
-- **Context window.** WebLLM builds default to 4K tokens, which is too small for agents. The catalog requests 8K–16K when memory allows. Models squeezed below 8K are ranked down.
-- **Tool-use quality.** Qwen3 is ranked first: it is trained on the `<tool_call>` format enclave uses. Qwen3.5 is available but marked experimental, because its WebLLM build caps conversation history (`max_history_size: 1`).
-- **First-visit download.** Automatic choice is capped at 2.5 GB. Pass `maxDownloadMB` to allow Qwen3 8B.
+`llm: 'auto'` picks from a curated catalog by GPU memory and capability:
 
-| Preset | Runtime | Download | Notes |
+| Preset | Runtime | Download | Use |
 |---|---|---|---|
-| `qwen3-8b` | WebLLM | 4.6 GB | Best quality; needs ~6 GB of GPU memory |
-| `qwen3-4b` | WebLLM | 2.3 GB | Default on 8 GB+ desktops |
+| `qwen3-4b` | WebLLM | 2.3 GB | Default on 8 GB+ desktops. 95% on the production evals. |
+| `qwen3-8b` | WebLLM | 4.6 GB | Best in-browser quality; ~6 GB GPU memory. Opt in with `maxDownloadMB`. |
 | `qwen3-1.7b` | WebLLM | 1.1 GB | Laptops and integrated GPUs |
+| `qwen3-0.6b` | WebLLM | 0.5 GB | Phones and demos |
 | `hermes-3-3b`, `llama-3.2-3b`, `phi-4-mini` | WebLLM | 1.8–2.2 GB | Alternatives |
-| `qwen3-0.6b` | WebLLM | 0.5 GB | Phones, quick demos |
-| `tjs-qwen3-1.7b`, `tjs-granite-4-1b`, `tjs-lfm2-1.2b`, `tjs-qwen3-0.6b`, `tjs-qwen3.5-0.8b` | Transformers.js | 0.5–1.4 GB | Also run on WASM without WebGPU |
+| `tjs-qwen3-1.7b`, `tjs-granite-4-1b`, `tjs-qwen3-0.6b`, … | Transformers.js | 0.5–1.4 GB | Also run without WebGPU (WASM) |
 
 ```ts
-import { browserLLM, detectDevice, rankLLMs } from '@enclave/core/web'
-const device = await detectDevice()
-rankLLMs(device)                             // everything that fits, best first
-await ai.useModel('qwen3-1.7b')              // switch at runtime (same WebLLM worker, old model unloaded)
+createWebEnclave({ llm: 'qwen3-1.7b', ... })      // pick a preset
+await ai.useModel('qwen3-8b')                       // switch at runtime (the old model is unloaded)
+
+import { detectDevice, rankLLMs } from '@enclave/core/web'
+rankLLMs(await detectDevice())                      // every preset that fits, best first
 ```
 
-**Thinking defaults to `'auto'` for Qwen3.** With thinking off, Qwen3 4B called the right tool 0/4 times; with thinking on, 4/4. `'auto'` reasons when a new request arrives and skips it after tool results, where it only costs time. It matched always-on quality and cut p90 latency from 32.5 s to 19.4 s. Use `thinking: true` for hard multi-step tasks, `false` for plain chat.
+Qwen3 is ranked first because it is trained on the tool-call format enclave uses. **Thinking** defaults to `'auto'`: the model reasons on new requests and answers directly after tool results. With thinking off, Qwen3 4B called the right tool 0/4 times; `'auto'` matched always-on quality at lower latency. Set `thinking: false` for plain chat.
 
-### Embeddings and reranking (Transformers.js)
+### On a local model server (Ollama, LM Studio)
 
-Presets encode each model's correct pooling, prefixes and per-backend dtype. Getting these wrong silently degrades retrieval.
-
-| Preset | Dims | Download | Notes |
-|---|---|---|---|
-| `embeddinggemma` | 768 (Matryoshka 512/256/128) | 197 MB | Best quality under 500M params; 100+ languages; `title: … \| text: …` document format |
-| `granite-multilingual-r2` | 384 | 98–195 MB | Fast; 200+ languages; 32K tokens |
-| `granite-small-r2` | 384 | 52–97 MB | Fast; English; 8K tokens |
-| `qwen3-embedding-0.6b` | 1024 (Matryoshka) | 567 MB | Highest quality; heavy |
-| `gte-small` | 384 | 34 MB | database.build's model, for compatibility |
-
-| Reranker | Download | Notes |
-|---|---|---|
-| `mxbai-rerank-xsmall` | 87 MB | Default |
-| `ms-marco-minilm` | 23 MB | Fastest |
-| `bge-reranker-v2-m3` | 571–700 MB | Multilingual |
-
-```ts
-import { transformersEmbedder, transformersReranker } from '@enclave/core/transformers'
-transformersEmbedder({ preset: 'embeddinggemma', dimensions: 256, worker })
-transformersReranker({ preset: 'mxbai-rerank-xsmall', worker })
-```
-
-Switching embedding models is safe. The index records which embedder built it, and `createWebEnclave` re-embeds existing documents automatically (`knowledge.autoReindex`).
-
-### Download and cache management
-
-Every downloadable component implements `isCached()`, `load()` and `clearCache()`. `isCached()` is true only when every file needed on this device is in the browser cache, for the dtype and backend the device will actually use: WebLLM weights plus the compiled model library, or ONNX weights, tokenizer and config. `createWebEnclave` exposes the whole catalog:
-
-```ts
-const status = await ai.modelCache.status()
-// [{ kind: 'llm', id: 'qwen3-4b', cached: true, active: true, downloadMB: 2300 }, { kind: 'embedding', ... }, ...]
-await ai.modelCache.clear('llm', 'qwen3-8b')
-```
-
-Status is computed against the same hosting configuration the app downloads with, so self-hosted models are reported correctly. WebLLM never caches model libraries served from a `localhost` URL (a development convenience), so test offline behaviour on a real hostname or `127.0.0.1`.
-
-### Local servers (optional)
-
-For machines that already run a model server:
+On machines with a capable GPU, a local 27B model is markedly better and about 2.5× faster than the in-browser 4B. Data still stays on the machine: `localhost` counts as `device` locality.
 
 ```ts
 import { discoverLocalModels, recommendOllamaModel, ollama, ollamaEmbedder, lmstudio } from '@enclave/core/models/local'
 
-const found = await discoverLocalModels()                  // Ollama (:11434) + LM Studio (:1234); unreachable servers are skipped
-const pick = recommendOllamaModel(found)                   // best measured preset that is installed
-await ai.useModel(ollama({ model: pick?.tag ?? 'qwen3.6:27b-q4_K_M', contextWindow: 32768 }))
-const embedder = ollamaEmbedder()                          // embeddinggemma, with its measured prompts and relevance floor
-await ai.useModel(lmstudio({ model: 'qwen/qwen3-4b' }))
+const found = await discoverLocalModels()          // Ollama (:11434) and LM Studio (:1234); missing servers are skipped
+const pick = recommendOllamaModel(found)            // best measured preset that is installed
+
+const ai = await createWebEnclave({
+  workers,
+  llm: pick ? ollama({ model: pick.tag, contextWindow: 32768 }) : 'auto',   // fall back to the browser
+  embedding: ollamaEmbedder(),                      // embeddinggemma via Ollama (optional)
+  skills: [knowledgeSkill(), sqlSkill()],
+})
 ```
 
-Measured with the production evals, on an M2 Max with 32 GB, Ollama 0.35 and the default GPU memory limit:
+Measured presets (M2 Max, 32 GB, default settings):
 
-| Model | Eval pass rate | Median per case | Size |
+| Model | Eval pass rate | Median time per case | Download |
 |---|---|---|---|
-| `qwen3.6:27b-q4_K_M` (quality default) | 98.5% | 15 s | 17 GB |
+| `qwen3.6:27b-q4_K_M` (Ollama; recommended) | 98.5% (99% with Ollama embeddings) | 15 s | 17 GB |
+| `qwen3.6-27b` GGUF (LM Studio) | 99.5% | 14 s | 17.5 GB |
 | `qwen3.8:27b-q4_K_M` | 99.0% | 17 s | 17 GB |
-| `qwen3.5:9b` (fast) | 92.8% | 6 s | 6.6 GB |
-| In-browser WebLLM Qwen3 4B, for comparison | 91.8% | 38 s | 2.3 GB |
+| `qwen3.5:9b` (fast) | 93% | 6 s | 6.6 GB |
 
-- End to end on the full local stack (`qwen3.6:27b` for chat, Ollama `embeddinggemma` for search): **99%** [96–100%] of runs passed, and 97% of cases passed all 3 repeats.
-- The 27B models tie on quality. `qwen3.6` is 25% faster at p90.
-- `qwen3.5:9b` twice claimed an action that had not happened. Use a 27B where actions matter.
+`qwen3.5:9b` occasionally claimed an action it hadn't taken, so prefer a 27B model where actions matter.
 
-Embeddings on the 91-query retrieval benchmark:
+**Ollama notes:**
+- enclave uses the native `/api/chat` endpoint, which supports `num_ctx`, thinking and tools.
+- Prompts are laid out so Ollama reuses its prompt cache across agent steps: a follow-up step reads its prompt in about 0.3–0.6 s, against 2–8 s cold.
+- Ollama allows `localhost` origins by default, so no setup is needed.
 
-| Embedder | Recall@3 | MRR | Per query |
+**LM Studio notes:**
+- **CORS:** browser apps need the server started with `lms server start --cors`. This lets *any* website you visit call the server, so enable it only while needed.
+- **Context length:** it's fixed when the model loads (`lms load <model> --context-length 32768`). Pass the same value as `contextWindow`.
+- **GGUF vs MLX:** prefer GGUF builds. On Apple silicon, MLX was not faster and scored slightly lower.
+
+```ts
+lmstudio({ model: 'qwen/qwen3.6-27b', contextWindow: 32768 })
+```
+
+### Remote APIs (opt-in)
+
+```ts
+import { openaiCompatible } from '@enclave/core/models/openai'
+import { anthropic } from '@enclave/core/models/anthropic'
+
+createWebEnclave({ privacy: { allow: 'remote' }, llm: anthropic({ apiKey }) })
+```
+
+Remote models are refused (`PrivacyError`) unless the privacy policy allows `remote`.
+
+## Documents and private RAG
+
+### Ingesting
+
+```ts
+const { documents, chunks, skipped } = await ai.knowledge!.ingest(
+  [
+    { id: 'hr-vacation', title: 'Vacation policy', content: text, source: 'hr/vacation.md', metadata: { dept: 'hr' } },
+    // ...
+  ],
+  { collection: 'handbook', onProgress: ({ done, total }) => bar(done / total) },
+)
+```
+
+- **Chunking:** markdown-aware (sections, then paragraphs, lines and sentences), about 1,200 characters with overlap. Override with `chunk: { size, overlap }`.
+- **Idempotent:** unchanged documents are skipped by content hash. Re-ingesting the same `id` replaces it.
+- **Collections:** documents can be grouped into collections (`handbook`, `tickets`…), and searches can target one or several.
+- **Other operations:** `remove(id)`, `clear(collection)`, `collections()`, `reindex()`.
+
+### How the agent uses documents
+
+`knowledgeSkill()` gives the agent two paths to your documents:
+
+1. **Auto-retrieval** (default on). Before the model runs, the latest message is searched and relevant passages go into its context. Small models often skip search tools, so this matters.
+2. **The `search_knowledge` tool**, for follow-up searches the model decides to make.
+
+Auto-retrieval is deliberately selective, because irrelevant passages derail small models:
+- **Relevance floor:** a passage is used only when the best match clears the embedder's calibrated floor (0.35 for EmbeddingGemma). Chit-chat and commands get no passages.
+- **Relative cutoff:** weaker matches are dropped relative to the best one.
+- **Follow-ups:** short follow-ups ("how much does it cost?") are searched again together with the previous question.
+- **Role follow-up:** "who approves this?" follows a role title in the best passage ("Director of Finance") to the page that names the person.
+- **No retrieval for reworking:** requests that rework earlier answers ("summarize both of those") skip retrieval.
+
+Answers cite passages as `[1]`, `[2]`. Options:
+
+```ts
+knowledgeSkill({
+  collections: ['handbook'],          // restrict scope (default: everything except memories)
+  limit: 6,                           // results per search_knowledge call
+  autoRetrieve: { limit: 3, maxChars: 3600, minSimilarity: 0.35, relativeCutoff: 0.5, followRoles: true },
+  // autoRetrieve: false              // tool-only RAG
+})
+```
+
+### Searching directly
+
+```ts
+const hits = await ai.knowledge!.search('parental leave notice period', {
+  limit: 5, mode: 'vector',            // 'hybrid' | 'vector' | 'keyword'
+  collection: 'handbook', filter: { dept: 'hr' }, minSimilarity: 0.3,
+})
+// [{ documentId, title, source, content, similarity, score, rerankScore?, metadata }]
+```
+
+### Embedding models
+
+| Preset | Dims | Download | Notes |
 |---|---|---|---|
-| `embeddinggemma` (default) | 0.995 | 0.941 | 21 ms |
-| `qwen3-embedding:4b` (1024-d) | 0.995 | 0.908 | 68 ms |
-| `qwen3-embedding:0.6b` | 0.973 | 0.886 | 20 ms |
-| `bge-m3` | 0.956 | 0.879 | 21 ms |
+| `embeddinggemma` (default with WebGPU) | 768 (Matryoshka 512/256/128) | 197 MB | Best measured: recall@3 0.995 on the 91-query benchmark; 100+ languages |
+| `granite-multilingual-r2` (default without WebGPU, and on mobile) | 384 | 98–195 MB | Fast, 200+ languages |
+| `granite-small-r2` | 384 | 52–97 MB | Fast, English |
+| `qwen3-embedding-0.6b` | 1024 | 567 MB | Heavy |
+| `gte-small` | 384 | 34 MB | database.build compatibility |
 
-Qwen3-Embedding needs its exact instruction format. A paraphrased instruction dropped the 0.6b model to 0.912.
+```ts
+createWebEnclave({ embedding: 'granite-small-r2' })
+createWebEnclave({ embedding: ollamaEmbedder('embeddinggemma') })   // via Ollama
+```
 
-- **Ollama** uses the native `/api/chat` endpoint, which supports `num_ctx`, thinking and tools. The OpenAI-compatible endpoint ignores `num_ctx`, and Ollama's default window is too small for agents.
-  - Prompts are laid out for Ollama's prompt cache: live context rides on the newest message. A follow-up step reads its prompt in about 0.3–0.6 s, against 2–8 s cold.
-  - `think: 'auto'` (the default) reasons on new requests, answers directly after tool results, and applies only to models that support thinking.
-- **LM Studio** uses its OpenAI-compatible server, with the same cache-friendly context layout and `think: 'auto'`, which sends `reasoning_effort: 'none'` after tool results.
-  - Measured on the same evals (LM Studio 0.4.25), the GGUF builds match Ollama: `qwen3.6-27b` scored 99.5%, and 99.5% as a full stack with LM Studio's EmbeddingGemma.
-  - The MLX builds were not faster on an M2 Max and scored slightly lower (97.4% / 90.8%), so prefer the GGUF variants.
-  - **CORS:** browser apps need `lms server start --cors`, and that lets *any* website you visit call the server. Ollama allows only localhost origins by default. Enable CORS only while you need it.
-  - **Context window:** set it at load time (`lms load <model> --context-length 32768`), and pass the same value as `contextWindow`.
-  - **Variants:** `lms load` can't pick a variant when a model has both MLX and GGUF builds. Choose the variant in the app, or keep only one downloaded.
-- **Discovery** reports tool support, context length and loaded state.
-- **`localEmbedder`** computes embeddings on either server. Setting `dimensions` below the model's output truncates Matryoshka models; pgvector's HNSW index takes at most 2000 dimensions.
+Switching embedders is safe: the index records which embedder built it, and existing documents are re-embedded automatically.
 
-Any OpenAI-compatible endpoint also works via `openaiCompatible()`, and Claude via `anthropic()`.
+A **reranker** (cross-encoder) is available (`reranker: 'mxbai-rerank-xsmall'`), but it's off by default. On the benchmark, EmbeddingGemma vector search alone was more accurate and far faster.
 
-## Skills
+### Untrusted documents
 
-A skill bundles instructions, typed tools, its own tables, and live context:
+Retrieved text is treated as data, not instructions:
+- Paragraphs that address AI assistants ("ignore previous instructions…") are redacted before the model sees them. They're also kept out of auto-retrieval unless they're the best match.
+- In the evals, a planted "system note" in a document no longer changes answers (safety 30/30).
+- The helpers are exported as `looksLikeInjection` and `redactInjections`.
+
+## The database and SQL
+
+Every enclave has a PGlite database: Postgres 17 with pgvector, persisted to IndexedDB (or OPFS). Use it directly:
+
+```ts
+await ai.db.exec(`create table if not exists books (id bigint primary key generated always as identity, title text, author text)`)
+const { rows } = await ai.db.query('select * from books where author = $1', ['Le Guin'])
+```
+
+`sqlSkill()` lets the agent design schemas, query and change data:
+
+```ts
+sqlSkill({
+  schemas: ['public'],        // what the model may see
+  readOnly: false,            // true: SELECT only, enforced by a read-only transaction
+  approveWrites: true,        // default: ask the user before INSERT/UPDATE/DELETE/DDL
+  maxRows: 100,
+  sampleValues: 12,           // list values of small lookup columns (0 disables)
+})
+```
+
+The model sees a live schema and gets `describe_schema` and `execute_sql`. To make it accurate on your data:
+- **Document business rules in the schema.** Comments are shown to the model:
+  ```sql
+  comment on table orders is 'Revenue counts only orders whose status is not cancelled.';
+  ```
+  Without this rule, the model wrote correct SQL but computed the wrong revenue.
+- **Sample values** let it map a user's words to data ("the Fleet Console" is a product).
+  - Only lookup-style columns are sampled: tables that other tables reference, shown with their ids, and columns whose values repeat (status, country).
+  - Free-text and sensitive-looking columns (email, phone, password, token, key) are never sampled.
+- **Internal tables are hidden.** The internal `enclave` schema (documents, threads) is never visible to the model.
+
+## Memory
+
+```ts
+memorySkill({ recent: 10 })   // the 10 most recent memories go into context
+```
+
+- **Tools:** the agent gets `remember`, `recall` and `forget`. `remember({ fact, replaces })` updates a fact in one call.
+- **Context:** recent memories are injected each turn, so the agent knows the user across conversations.
+- **Guards:**
+  - **Secrets:** `remember` refuses passwords, API keys and card numbers, including bare password-like tokens.
+  - **Deletion scope:** `forget` can only delete memories, never documents.
+  - **Separation:** memories never show up as document search results.
+
+## Writing skills
+
+A skill packages what the agent needs for one area of your app:
 
 ```ts
 import { z } from 'zod'
-import { defineSkill, tool } from '@enclave/core'
+import { defineSkill, tool, dateContext } from '@enclave/core'
 
 export const invoices = defineSkill({
   name: 'invoices',
@@ -220,116 +358,181 @@ export const invoices = defineSkill({
       description: 'Find invoices for a customer.',
       input: z.object({ customer: z.string(), status: z.enum(['open', 'paid']).optional() }),
       execute: async ({ customer, status }, ctx) => {
-        ctx.emit({ searching: customer })                 // streams to the UI
-        return myApp.invoices.search({ customer, status }) // call into the host app
+        ctx.emit({ searching: customer })                  // custom event for your UI
+        return myApp.invoices.search({ customer, status }) // call into your app
       },
-      toModelOutput: (rows) => rows.slice(0, 20),         // UI gets everything, the model gets 20
+      toModelOutput: (rows) => rows.slice(0, 20),          // UI gets everything, the model gets 20
     }),
     annotate: tool({
       description: 'Attach a note to an invoice.',
       input: z.object({ invoiceId: z.string(), note: z.string() }),
-      needsApproval: true,
+      needsApproval: true,                                 // the user confirms first
       execute: ({ invoiceId, note }, { db }) =>
         db.query('insert into invoice_notes values ($1, $2) on conflict (invoice_id) do update set note = $2', [invoiceId, note]),
     }),
   },
-  context: async ({ db, messages }) => `${(await db.query('select count(*) from invoice_notes')).rows[0].count} annotated invoices`,
+  context: async ({ db }) => `${dateContext()}\nOpen invoices: ${await myApp.invoices.countOpen()}`,
 })
+
+const ai = await createWebEnclave({ workers, skills: [invoices, knowledgeSkill()] })
+await ai.use(anotherSkill)   // or add later
 ```
 
 | Field | Purpose |
 |---|---|
-| `name`, `description` | Identity. The description is all the model sees of a `lazy` skill. |
+| `name`, `description` | Identity. For a `lazy` skill, the description is all the model sees until it activates the skill. |
 | `instructions` | Added to the system prompt. |
-| `tools` | `tool({ description, input: zodSchema, execute, needsApproval?, toModelOutput? })`. Inputs are validated. Validation and runtime errors go back to the model so it can correct itself. |
+| `tools` | `tool({ description, input, execute, needsApproval?, toModelOutput? })`. Invalid inputs and thrown errors go back to the model so it can correct itself. |
 | `migrations` | SQL applied once per database, in order, tracked per skill. |
-| `setup(ctx)` | Runs once at registration. |
-| `context(ctx)` | Fresh state before each model step. `ctx.messages` exposes the conversation. |
-| `lazy` | Only the description is listed until the model calls `activate_skill`. Fewer visible tools makes small models faster and more accurate. |
+| `setup(ctx)` | Runs once when the skill is registered. |
+| `context(ctx)` | Fresh text before every model step: current state, today's date, counts. |
+| `lazy` | Hidden until the model calls `activate_skill`. Fewer visible tools make small models faster and more accurate. |
 
-Tool context: `db`, `knowledge`, `embedder`, `threadId`, `skill`, `signal`, `emit(data)`.
+Tools receive `ctx` with `db`, `knowledge`, `embedder`, `threadId`, `skill`, `signal` and `emit(data)`. `needsApproval` can be a function: `(input, ctx) => input.amount > 100`.
 
-For small models, put guidance in tool results, where the model is looking when it decides what to do next. For example, when a lookup is ambiguous, `toModelOutput` can return `{ contacts, note: 'Several contacts share this name. Ask which one before acting.' }`. In the evals, the same rule in the skill's instructions never made Qwen3 4B ask (0/3).
+**Tips for small models** (each learned from the evals):
+- **Guide from tool results.** The model reads them at the moment it decides what to do next. When a lookup is ambiguous, return `{ matches, note: 'Several contacts share this name. Ask which one before acting.' }`. The same rule written in the instructions never worked.
+- **Give dates.** `dateContext()` lists today, the rest of this week and next week, so "this Friday" is read off directly instead of counted.
+- **Return compact data.** Use `toModelOutput` to send the model only what it needs.
+- **Validate on the server side.** Throw a clear error, and the model will retry with corrected input.
 
-### Built-in skills
+## Building the UI
 
-- **`knowledgeSkill()`**
-  - Auto-retrieval (default on): before the model runs, the latest user message is searched and the most relevant passages go into context. This is classic RAG alongside the `search_knowledge` tool. Small models often skip the tool; with auto-retrieval, Qwen3 0.6B answered document questions correctly where it previously invented an answer.
-  - Auto-retrieval stays silent unless something is relevant. Irrelevant passages hurt small models badly: in the production evals, passages attached to "remember that I'm on the Payments team" made the model summarise support SLAs instead of saving the fact.
-    - A passage is used only when the best match clears the embedder's `relevanceFloor`. Each preset has a floor, calibrated because cosine scales differ by model: 0.35 for EmbeddingGemma, 0.8 for GTE.
-    - Passages must also score at least half the best match's margin above that floor.
-    - A short follow-up ("how much does it cost?") is searched again together with the previous question.
-  - Documents are treated as untrusted. Paragraphs that address AI assistants ("ignore previous instructions…") are replaced with a removal notice before the model sees them, in auto-retrieval and in `search_knowledge` results. Flagging them wasn't enough: asked to summarise a poisoned document, Qwen3 4B still repeated the planted password in 2 of 3 runs. Such passages are also dropped from auto-retrieval unless they are the best match. `looksLikeInjection` and `redactInjections` are exported.
-  - When a passage answers only part of a question (it names a role but not the person), the model is told to search for the rest.
-  - **Role follow-up.** For who/name questions, role titles in the best passage are followed to the passage that names the person. Example: "approval from the Director of Finance" leads to the leadership page. On the 91 labeled queries it added a passage only where one was needed, and it took the in-browser model's multi-hop case from 0/3 to 3/3. Turn it off with `followRoles: false`.
-  - Tune with `autoRetrieve: { minSimilarity, relativeCutoff, limit, maxChars, minRerankScore, followRoles }`.
-  - Passages are cited as `[n]`.
-- **`sqlSkill({ readOnly, approveWrites, maxRows })`**
-  - The database.build capability: live schema in context, plus `describe_schema` and `execute_sql`.
-  - Writes need approval by default.
-  - **Sample values.** Lookup-style text columns with up to 12 distinct values list them (`sampleValues`). The model can then tell that "the Fleet Console" is a product name.
-    - Sampled: tables other tables reference (products, contacts), shown with their ids as `'Fleet Console' (id 10)`, and columns whose values repeat (status, country).
-    - Not sampled: record-level free text such as ticket titles, and columns that look sensitive (email, phone, password, token, key).
-    - Two failure modes shaped this. Listed ticket titles made the in-browser model reuse an existing ticket's id. Names listed without ids made it read the list position as the id.
-  - Table and column comments (`COMMENT ON`) are shown as SQL comments. They are the place to document business rules the model can't guess, such as "revenue excludes cancelled orders". Without that rule, Qwen3 4B wrote correct SQL but computed the wrong revenue.
-  - The internal `enclave` schema is hidden from the model.
-- **`memorySkill()`**: `remember`, `recall` and `forget`, backed by the knowledge base. Recent facts are added to context. When the latest message asks to remember or forget something, a one-turn hint tells the model to call the tool. Otherwise small models reply "I'll remember that" and store nothing. `remember({ fact, replaces })` updates a fact in one call. `forget` and `replaces` can only delete memories, never documents. Memories are kept out of `knowledgeSkill` searches (`exclude`, default `['memory']`), so they can't pass as documents. `remember` refuses anything that looks like a credential or card number (`looksLikeSecret`), because prompting alone didn't stop Qwen3 4B from saving a password.
+### Events
 
-The agent loop answers a repeated identical tool call from the earlier result instead of running it again. This breaks the search loops small models fall into.
+`thread.send()` returns a stream of typed events:
 
-Small models sometimes announce a call ("I will now call execute_sql with the corrected query") and then end the turn. The loop catches this when tools already ran in the turn: it adds one reminder, a user message marked `synthetic: true` that UIs can hide, and continues.
-
-`dateContext(today)` spells out today, the rest of this week and all of next week, with full weekday names, for a skill's `context`.
-- Qwen3 4B got "this Friday" wrong when it had to count days itself. With a flat list of abbreviated days it still invented a "September 31st".
-- Grouped by week, "this Friday" reads off directly: 3/3 in the evals.
-
-## WebLLM performance and quality
-
-Enclave's prompt layout, decoding and agent loop are built around how WebLLM actually executes:
-
-- **KV-cache reuse.** WebLLM skips re-reading the prompt when a request extends the conversation it already holds, byte for byte. To make that happen:
-  - The system prompt holds only instructions and tools.
-  - Live context (schema, retrieved passages) rides on the newest message.
-  - Every earlier message is replayed exactly as it was first sent, including the model's raw reply.
-
-  Measured on Qwen3 4B: after a tool result, the next step prefilled 250 tokens instead of the whole prompt, and time to first token fell from 2.2 s to 0.7 s.
-- **Grammar-constrained tool calls.** WebLLM's xgrammar structural tags leave text free. Once the model writes `<tool_call>`, it can only complete a call to a real tool, with arguments that validate against that tool's schema. Schemas xgrammar can't compile fall back to unconstrained decoding.
-- **Adaptive thinking.** Qwen3 reasons before acting and answers directly after tool results.
-- **Thinking budget** (`webllm: { thinkingBudget }`, default 2048 tokens). Past the budget, reasoning is closed and the step is re-asked with thinking off. It exists to stop runaway deliberation, so keep it well above normal reasoning.
-  - Qwen3 4B without thinking describes SQL instead of running it. At 1024, the budget cut 17% of SQL turns, and their accuracy dropped.
-  - Only 2 of 246 eval turns exceeded 2048 tokens. Cut-off steps report `metrics.thinkingCutOff`.
-  - **Reasoning loops** end thinking early, the same way. A loop is a sentence of 40+ characters appearing 4 times (`reasoningLoops`). In the evals, Qwen3 4B circled "without the customer's id we can't…" for its whole budget.
-  - A looser threshold (25 characters, 3 times) cut normal deliberation. The model then described SQL instead of running it.
-- **Reasoning history** (`webllm: { reasoningHistory }`), measured on 3 conversations × 3 repeats (33 graded later turns):
-
-  | Mode | Later turns passed | Time to first token (later turns) | Behaviour |
-  |---|---|---|---|
-  | `current-turn` (default) | **33/33** | 3.2 s | Drops earlier reasoning, as Qwen3's template does. The prompt is re-read at every new user turn. |
-  | `auto` | 31/33 | **0.40 s** | Keeps reasoning, so the cache survives across turns. Past 60% of the window it compacts once, only at a turn boundary, then accumulates again. |
-  | `all` | similar to `auto` | 0.35 s | Keeps everything until the history budget trims it. |
-
-  With a 4K window, where `auto` compaction fires on the real model, it passed 22/22 later turns. The quality risk of keeping reasoning is carry-over: in the failures we saw, errors or focus from an earlier turn leaked into later ones. Choose `auto` for chat UIs where first-token latency matters; keep the default for accuracy-critical flows.
-- **Per-step metrics.** Every `step-finish` event carries prefill tokens, KV reuse, prompt size, compaction, time to first token, prefill/decode throughput and grammar compile time.
-- **Small-model safeguards.**
-  - Context budgeting fits history and tool output into the model's window.
-  - Generation stops at `<tool_response>`, so the model can't invent tool results.
-  - Malformed calls go back to the model as errors.
-  - Both `<tool_call>` JSON and Qwen XML function calls are parsed.
-- **Engine management.**
-  - One WebLLM engine per worker; switching models unloads the old one.
-  - The Transformers.js worker serializes model loads, because concurrent ONNX Runtime WebGPU session creation stalled in testing.
-
-## Tuning with evals
-
-`@enclave/core/eval` grades agent behaviour and retrieval quality in the browser, against your own data, without sending it anywhere:
+| Event | Use |
+|---|---|
+| `text-delta` | Stream the answer |
+| `reasoning-delta` | Optional "thinking" display |
+| `tool-call` / `tool-result` | Show tool activity (`durationMs`, `isError`) |
+| `approval-request` | Ask the user (see below) |
+| `custom` | Data a tool sent with `ctx.emit` |
+| `message` | A complete message was added to the thread |
+| `step-start` / `step-finish` | Per model call; `step-finish` carries timing and metrics |
+| `finish` | `reason`: `stop`, `max-steps` or `aborted`, with token usage |
 
 ```ts
-import { runEval, formatReport, evalRetrieval } from '@enclave/core/eval'
+const controller = new AbortController()
+const stream = thread.send(input, {
+  signal: controller.signal,                                   // stop button
+  onApproval: async (call) => confirmDialog(`${call.name}: ${JSON.stringify(call.input)}`),
+})
+for await (const e of stream) {
+  switch (e.type) {
+    case 'text-delta': appendText(e.delta); break
+    case 'tool-call': showTool(e.call.name, e.call.input); break
+    case 'tool-result': finishTool(e.call.id, e.isError); break
+  }
+}
+const { text, steps, usage } = await stream.result()
+```
+
+### Approvals
+
+Tools with `needsApproval` pause until your `onApproval` handler resolves. It can be set per enclave (`createWebEnclave({ onApproval })`) or per send. With no handler, approval-gated calls are denied, and the agent reports that honestly instead of claiming success.
+
+### Threads
+
+```ts
+const threads = await ai.threads()                 // [{ id, title, updatedAt, ... }]
+const messages = await ai.thread(id).messages()    // full history
+await ai.thread(id).rename('Q3 revenue')
+await ai.thread(id).delete()
+await ai.run('One-off question, no history')       // stateless
+```
+
+Messages with `synthetic: true` were added by the agent loop. For example, it adds a reminder when the model announces a tool call but doesn't make it. Hide them in your UI.
+
+## Privacy and security
+
+Three layers make "no data leaves the device" enforceable:
+
+**1. Locality policy.** Every model, embedder and reranker declares where it processes data. The enclave refuses components beyond the policy, including on `setModel`.
+
+```ts
+createWebEnclave({ privacy: { allow: 'device' } })   // browser + localhost only
+// 'local-network' (default): also private-network servers you control
+// 'remote': internet APIs, opt-in
+```
+
+**2. Self-hosted model files.** By default, weights come from Hugging Face, WebLLM libraries from GitHub, and ONNX Runtime from jsDelivr. These downloads carry no user data, but they reveal the user's IP address and which models you use. Mirror everything to your own origin:
+
+```sh
+npx enclave-mirror --out public/models --webllm qwen3-4b --embedding embeddinggemma --ort
+```
+```ts
+createWebEnclave({ selfHost: { baseUrl: '/models' }, ... })
+```
+
+**3. Browser-enforced lockdown.** Generate a Content-Security-Policy so the browser itself refuses any other connection, from the page and its workers:
+
+```ts
+import { contentSecurityPolicy, guardNetwork } from '@enclave/core/privacy'
+contentSecurityPolicy({ modelHosts: [] })        // self-hosted: connect-src 'self'
+contentSecurityPolicy({ localServers: true })    // also allow Ollama / LM Studio on localhost
+guardNetwork({ allow: [], onViolation: report }) // runtime defense in depth for fetch/XHR/WebSocket
+```
+
+Verified: in strict mode (self-hosted files plus CSP), a first-visit session downloaded every model, indexed a document and answered, contacting only the app's own origin.
+
+**Data at rest.** The database, threads, vectors and model caches live in the origin's IndexedDB/OPFS. `createWebEnclave` asks the browser to keep them persistent (`persist: true`).
+
+**Agent safety.**
+- Approval-gated writes.
+- Redaction of injected instructions in documents.
+- Secrets refused from memory.
+- Internal tables hidden from SQL.
+- Repeated identical tool calls short-circuited.
+
+## Downloads and offline use
+
+```ts
+const status = await ai.modelCache.status()
+// [{ kind: 'llm', id: 'qwen3-4b', cached: true, active: true, downloadMB: 2300 }, ...]
+await ai.modelCache.clear('llm', 'qwen3-8b')
+```
+
+- **`cached` means usable offline.** It's true only when every file this device needs is in the browser cache.
+- **Download size cap.** First-visit automatic choice is capped at 2.5 GB (`maxDownloadMB`).
+- **Test offline on a real hostname.** WebLLM does not cache model libraries served from `localhost`, so test offline behaviour on `127.0.0.1` or a real hostname.
+
+## Tuning WebLLM
+
+```ts
+createWebEnclave({
+  thinking: 'auto',                    // true | false | 'auto'
+  webllm: {
+    reasoningHistory: 'current-turn',  // 'current-turn' (default, most accurate) | 'auto' (fastest later turns) | 'all'
+    thinkingBudget: 2048,              // reasoning tokens per step before answering directly
+    constrainToolCalls: true,          // grammar-constrained tool calls (xgrammar)
+  },
+})
+```
+
+What enclave does for you, and why:
+- **KV-cache reuse.** The prompt is laid out so WebLLM continues from its cache. After a tool result, the next step re-reads ~250 tokens instead of the whole prompt.
+- **Lean history.** Earlier turns are replayed without their stale context blocks. Later-turn time to first token halved (14 s → 7 s) and accuracy rose.
+- **Grammar-constrained tool calls.** Once the model writes `<tool_call>`, it can only produce a valid call to a real tool.
+- **Thinking budget and loop cut-off.** Runaway reasoning (over budget, or the same sentence repeating) ends early, and the step is answered directly.
+- **Follow-through.** If the model announces a tool call but doesn't make it, the loop reminds it once.
+
+`reasoningHistory: 'auto'` keeps reasoning across turns, so the cache survives. Later turns then start in ~0.4 s instead of ~3 s, at a small accuracy cost (31/33 vs 33/33 later turns). Choose it for latency-sensitive chat.
+
+Every `step-finish` event reports prefill tokens, cache reuse, prompt size, time to first token and decode speed.
+
+## Evaluating your agent
+
+`@enclave/core/eval` runs cases against your enclave, in the browser, on your data:
+
+```ts
+import { runEval, formatReport, evalRetrieval, anyOf, numberNear, declines } from '@enclave/core/eval'
 
 const report = await runEval(ai, [
-  { name: 'wifi', input: 'What is the guest wifi password?', expect: { answer: 'sunflower42' } },
+  { name: 'wifi', input: 'Guest wifi password?', expect: { answer: 'maple-harbor-42' } },
   {
-    name: 'create table',
+    name: 'create books',
     input: 'Create a books table and add two novels',
     setup: (ai) => ai.db.exec('drop table if exists books'),
     expect: {
@@ -338,98 +541,94 @@ const report = await runEval(ai, [
     },
   },
   { name: 'restraint', input: 'Say good morning in Spanish', expect: { noTools: true, answer: /buenos/i } },
+  {
+    name: 'follow-up',
+    turns: [
+      { input: 'What was revenue in June?', expect: { answer: numberNear(34799) } },
+      { input: 'And in May?', expect: { answer: numberNear(30020) } },
+    ],
+  },
 ], { repeats: 3 })
-console.log(formatReport(report))   // pass rate, p50/p90 latency, TTFT, tokens, KV reuse, per-case failures
 
-await evalRetrieval(ai.knowledge!, [{ query: 'guest wifi', relevant: ['wifi-doc'] }], { k: 5 })  // recall, MRR, nDCG
+console.log(formatReport(report))   // pass rate with 95% CI, consistency, per-tag results, latency, failures
+await evalRetrieval(ai.knowledge!, [{ query: 'guest wifi', relevant: ['it-wifi'] }], { k: 3 })   // recall, MRR, nDCG
 ```
 
-While iterating, `runEval(ai, cases, { failFast: true })` stops at the first failing run. `{ maxFailures: n }` stops once more than `n` runs fail, and `{ first: [...names] }` runs the named cases (for example, last run's failures) first. A report that stopped early carries `report.stopped`.
-
-Multi-turn cases grade every turn (`turns: [{ input, expect }, …]`). The report adds later-turn metrics, where conversation history matters: pass rate, time to first token, prefill tokens, prompt size and KV reuse.
-
-The playground's `eval.html` runs two suites:
-- `suite=single`: 9 cases covering private RAG, SQL actions, chained steps and restraint.
-- `suite=multi`: 3 conversations of 4–5 turns.
-
-Configure by query string, e.g. `?suite=multi&history=auto&ctx=4096&repeats=3`.
-
-How the current defaults were chosen (Qwen3 4B, WebGPU, Apple silicon):
-
-| Configuration | Pass | p50 | p90 |
-|---|---|---|---|
-| Previous prompt, thinking always on | 83% (15/18) | 14.1 s | 32.5 s |
-| Previous prompt, thinking `auto` | 89% (16/18) | 12.2 s | 19.4 s |
-| **Tuned prompt, thinking `auto`, constrained (default)** | **100% (27/27)** | **9.9 s** | **23.4 s** |
-
-The tuned prompt fixed two failure modes the evals exposed:
-- The model refused general questions ("I don't have access to translation tools").
-- The model printed SQL instead of running it.
-
-On the "create table" case alone it went from 1/6 to 6/6.
-
-## Agent API
+**Iterate fast.** A full suite with 3 repeats can take hours on in-browser models. While fixing failures:
 
 ```ts
-const thread = ai.thread(id?)                           // persisted in PGlite
-for await (const e of thread.send(text, { signal, onApproval })) { … }
-await thread.send(text).text()                          // or just the final answer
-ai.run(textOrMessages)                                  // stateless
-await ai.use(skill)                                     // add a skill later
-ai.setModel(model) / await ai.useModel('qwen3-1.7b')
-ai.device, ai.plan                                      // what was detected and chosen
+runEval(ai, cases, { failFast: true })                  // stop at the first failing run
+runEval(ai, cases, { maxFailures: 5, first: lastFailures })   // regression guard: likely failures first
 ```
 
-Events: `step-start`, `text-delta`, `reasoning-delta`, `tool-call`, `approval-request`, `tool-result`, `custom`, `message`, `step-finish` (timing, prefill tokens, KV reuse), `finish`.
+The production suite in [`packages/evals`](packages/evals) has 65 cases (84 graded turns) covering RAG, SQL, a CRM skill, memory, multi-turn conversations and safety. Its graders are themselves tested against reference solutions, a do-nothing model and real model answers. It runs the same cases against WebLLM, Ollama or LM Studio. See its [README](packages/evals/README.md).
 
-Lower-level building blocks (`createEnclave`, `createDb`, `createWorkerDb`, `Knowledge`, `webllm`, `transformersLLM`, `fromTextModel`, `fallback`) are all exported for custom setups.
+## Benchmarks
 
-## Entry points
+Production evals, 65 cases × 3 repeats, Apple M2 Max (32 GB):
 
-| Import | Provides |
+| Setup | Runs passed | Cases passing all 3 repeats | Median time per case |
+|---|---|---|---|
+| In-browser WebLLM Qwen3 4B (start of the eval work) | 75% [69–81%] | 72% | 38 s |
+| **In-browser WebLLM Qwen3 4B (current)** | **95% [91–98%]** | **92%** | 38 s |
+| Ollama `qwen3.6:27b` | 98.5% | 95% | 15 s |
+| Ollama `qwen3.6:27b` + Ollama embeddings | 99% | 97% | 18 s |
+| LM Studio `qwen3.6-27b` GGUF + LM Studio embeddings | 99.5% | 98% | 14 s |
+
+The in-browser model passes all safety (30/30), memory (15/15) and approval cases. Its remaining failure is a 4-turn analysis that ends in a dependent multi-row insert, where it guesses ids instead of looking them up. The 27B models pass it.
+
+Retrieval, 91 labeled queries:
+- **EmbeddingGemma vector search:** recall@3 0.995, MRR 0.94, 10/10 multilingual queries, about 50 ms per query on CPU.
+
+Full methodology, per-case history and every report: [`packages/evals`](packages/evals/README.md).
+
+## API reference
+
+| Import | Main exports |
 |---|---|
-| `@enclave/core` | `createEnclave`, `defineSkill`, `tool`, `Knowledge`, `fallback`, `fromTextModel`, types |
-| `@enclave/core/web` | `createWebEnclave`, `browserLLM`, `detectDevice`, catalogs, `recommend*` |
-| `@enclave/core/transformers` | `transformersEmbedder`, `transformersReranker`, `transformersLLM` |
-| `@enclave/core/transformers/worker` | `serveTransformers()` |
-| `@enclave/core/models/webllm` | `webllm`, `isWebLLMCached`, `deleteWebLLMCache` |
-| `@enclave/core/models/webllm-worker` | `serveWebLLM()` |
-| `@enclave/core/models/local` | `ollama`, `lmstudio`, `discoverLocalModels`, `localModel`, `localEmbedder` |
-| `@enclave/core/models/chrome` | `chromeAI` (Gemini Nano) |
-| `@enclave/core/models/openai`, `/models/anthropic` | Remote/other endpoints |
+| `@enclave/core` | `createEnclave`, `defineSkill`, `tool`, `Knowledge`, `dateContext`, `fallback`, `fromTextModel`, `PrivacyError`, types |
+| `@enclave/core/web` | `createWebEnclave`, `browserLLM`, `detectDevice`, `rankLLMs`, `recommendLLM`, `BROWSER_LLMS`, `EMBEDDING_PRESETS`, `RERANKER_PRESETS` |
+| `@enclave/core/skills` | `knowledgeSkill`, `sqlSkill`, `memorySkill`, `looksLikeInjection`, `looksLikeSecret` |
+| `@enclave/core/models/local` | `ollama`, `lmstudio`, `discoverLocalModels`, `recommendOllamaModel`, `ollamaEmbedder`, `localEmbedder`, `localModel`, `OLLAMA_LLM_PRESETS`, `OLLAMA_EMBEDDING_PRESETS` |
+| `@enclave/core/models/webllm` | `webllm`, `selfHostedAppConfig`, `isWebLLMCached`, `deleteWebLLMCache` |
+| `@enclave/core/models/webllm-worker` | `serveWebLLM` |
+| `@enclave/core/transformers` | `transformersEmbedder`, `transformersReranker`, `transformersLLM`, `configureTransformers` |
+| `@enclave/core/transformers/worker` | `serveTransformers` |
+| `@enclave/core/models/openai` | `openaiCompatible` |
+| `@enclave/core/models/anthropic` | `anthropic` |
+| `@enclave/core/models/chrome` | `chromeAI`, `chromeAIAvailable` (Gemini Nano) |
 | `@enclave/core/pglite`, `/pglite-worker` | `createDb`, `createWorkerDb`, `servePGlite` |
-| `@enclave/core/skills` | `knowledgeSkill`, `sqlSkill`, `memorySkill` |
-| `@enclave/core/eval` | `runEval`, `formatReport`, `evalRetrieval` |
 | `@enclave/core/privacy` | `contentSecurityPolicy`, `guardNetwork`, `selfHostedTransformers`, `localityOfUrl` |
-| `@enclave/core/testing` | `mockModel`, `hashEmbedder` |
+| `@enclave/core/eval` | `runEval`, `formatReport`, `compareReports`, `evalRetrieval`, `wilson`, matchers (`anyOf`, `allOf`, `noneOf`, `numberNear`, `count`, `declines`, `labeled`) |
+| `@enclave/core/testing` | `mockModel`, `hashEmbedder` (fast, deterministic tests) |
 
-## Develop
+**Lower level.** Without the web helpers, you can assemble everything yourself:
+
+```ts
+import { createEnclave } from '@enclave/core'
+import { createDb } from '@enclave/core/pglite'
+const ai = await createEnclave({ db: await createDb({ dataDir: 'memory://' }), model, embedder, skills, privacy: { allow: 'device' } })
+```
+
+`createEnclave` also accepts `system` (replaces the base prompt), `maxSteps` (default 12), `maxHistory`, `maxToolOutputChars`, `onApproval` and `knowledge` options. It works in Node too, which is how the unit tests run.
+
+## Development
 
 ```sh
 pnpm install
-pnpm test                                   # unit tests: real PGlite + pgvector, scripted model
-pnpm --filter @enclave/core test:e2e        # real weights on CPU: embeddings, reranker, Qwen3 0.6B tool use (~1.5 GB download)
-pnpm dev                                    # playground at http://localhost:5173 (eval suite at /eval.html)
-pnpm --filter playground mirror             # download models into public/models
-pnpm --filter playground dev:strict         # self-hosted models + CSP: no third-party requests
+pnpm test                                     # unit tests: real PGlite + pgvector, scripted model
+pnpm --filter @enclave/core test:e2e          # real weights on CPU (embeddings, reranker, Qwen3 0.6B)
+pnpm dev                                      # playground at http://localhost:5173
+pnpm --filter playground dev:strict           # self-hosted models + CSP: zero third-party requests
+pnpm --filter @enclave/evals test             # grader validation (seconds)
+pnpm --filter @enclave/evals eval             # production evals on WebGPU (hours; see packages/evals)
 ```
 
-The playground shows the detected device and a model picker. The picker groups WebLLM models (with fit, cached and too-large markers), Transformers.js models, Chrome built-in AI, and discovered Ollama / LM Studio models. It also has embedding and reranker pickers, download progress, cache deletion, file ingestion, and streaming chat with inline approvals.
+The playground picks a measured local model (Ollama or LM Studio) when one is installed, and otherwise the best in-browser model. It shows device detection, a model picker with cache state, downloads, document upload, threads and streaming chat with inline approvals.
 
-Local servers come first:
-- **Boot:** the playground discovers Ollama and LM Studio before it starts. On a first visit it picks the best installed measured preset (for example `qwen3.6:27b`), and falls back to the recommended in-browser model.
-- **Unreachable server:** if a saved local model can't be reached, the playground uses the in-browser model and says so.
-- **Picker:** measured Ollama models are listed first, with a ★, their eval pass rate and a time per answer. Installed Ollama embedders (`embeddinggemma` and others) appear in the embedding picker.
+## Status and limitations
 
-## Verified
-
-On Chrome with WebGPU (Apple silicon):
-
-- **Evals.** The 9-case suite passed 27/27 with the default configuration (Qwen3 4B, EmbeddingGemma, mxbai rerank).
-- **Strict privacy mode** (`pnpm dev:strict`: self-hosted models plus CSP `connect-src 'self'`). A first-visit session in a fresh profile downloaded every model, indexed a document and answered correctly. The only host it contacted was the app's own origin, with zero CSP violations. The same session in normal mode contacts huggingface.co, its CDN, cdn.jsdelivr.net and raw.githubusercontent.com.
-- **KV-cache reuse.** Steps after a tool result prefill ~250 new tokens instead of the full prompt. With `reasoningHistory: 'auto'`, later turns prefill ~200 tokens and start answering in 0.4 s (vs 3.2 s).
-- **Multi-turn suite.** 3 conversations × 3 repeats: 33/33 later turns with the defaults.
-- **Offline from cache** (strict mode, `127.0.0.1`). With the model host blocked after first load, the app indexed, searched, reranked and answered correctly entirely from the browser cache. `modelCache.status()` reported correct cached state before download, after download, across reload and after deletion, with zero off-origin requests.
-- **Node e2e suite.** Checks every embedding preset and the reranker against real weights, plus Qwen3 0.6B completing tool calls and RAG answers on CPU.
-
-Not yet verified: Windows/Linux GPUs, mobile browsers, Chrome built-in AI, and live Ollama / LM Studio servers (their adapters are tested against recorded protocol responses). The eval suites are small (9 single-turn cases, 3 conversations), so treat pass rates as directional and extend them with cases from your own domain.
+- **Pre-1.0.** APIs may change. Not yet published to npm.
+- **Where it's verified:** Chrome with WebGPU on Apple silicon, plus Node for the unit and CPU end-to-end tests. Windows/Linux GPUs, mobile browsers and Chrome built-in AI are untested.
+- **In-browser model limits:** Qwen3 4B is strong for its size but still slips occasionally on SQL details and long multi-step writes. Use a local 27B model for heavier workloads.
+- **First-visit download:** 2–3 GB for the default in-browser model. Show progress (`onProgress`) and cache state (`modelCache`).

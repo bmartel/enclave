@@ -60,6 +60,8 @@ export interface BrowserLLMOptions {
   reasoningHistory?: 'current-turn' | 'all' | 'auto'
   /** WebLLM: serve weights from your own host. See `selfHostedAppConfig`. */
   appConfig?: import('@mlc-ai/web-llm').AppConfig
+  /** WebLLM: most reasoning tokens per step before answering without thinking. Default 2048; 0 disables. */
+  thinkingBudget?: number
   contextWindow?: number
   onProgress?(p: WebProgress): void
 }
@@ -138,7 +140,7 @@ export interface WebEnclaveOptions extends Omit<EnclaveOptions, 'db' | 'model' |
    */
   thinking?: ThinkingMode
   /** Fine-tune the WebLLM engine (grammar constraints, reasoning history, self-hosted weights). */
-  webllm?: Pick<BrowserLLMOptions, 'constrainToolCalls' | 'reasoningHistory' | 'appConfig' | 'temperature'>
+  webllm?: Pick<BrowserLLMOptions, 'constrainToolCalls' | 'reasoningHistory' | 'appConfig' | 'temperature' | 'thinkingBudget'>
   /** Ask the browser to keep data and model caches from eviction. Default true. */
   persist?: boolean
   /**
@@ -353,6 +355,7 @@ function webllmTuning(options: BrowserLLMOptions) {
     ...(options.constrainToolCalls !== undefined ? { constrainToolCalls: options.constrainToolCalls } : {}),
     ...(options.reasoningHistory ? { reasoningHistory: options.reasoningHistory } : {}),
     ...(options.appConfig ? { appConfig: options.appConfig } : {}),
+    ...(options.thinkingBudget !== undefined ? { thinkingBudget: options.thinkingBudget } : {}),
   }
 }
 
