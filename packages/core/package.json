@@ -54,6 +54,10 @@
       "types": "./dist/store/pglite-worker.d.ts",
       "default": "./dist/store/pglite-worker.js"
     },
+    "./pglite-opfs-io": {
+      "types": "./dist/store/opfs/io-worker.d.ts",
+      "default": "./dist/store/opfs/io-worker.js"
+    },
     "./models/openai": {
       "types": "./dist/models/openai.d.ts",
       "default": "./dist/models/openai.js"

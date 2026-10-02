@@ -38,6 +38,7 @@ What you get:
 - [Build the chat UI](#build-the-chat-ui)
 - [Memory](#memory)
 - [Offline use and downloads](#offline-use-and-downloads)
+- [Choose where data is stored](#choose-where-data-is-stored)
 - [Test your assistant](#test-your-assistant)
 - [Benchmarks](#benchmarks)
 - [API reference](#api-reference)
@@ -860,6 +861,38 @@ createWebEnclave({
 ```
 
 Every `step-finish` event includes timing: time to first token, tokens per second, and how much of the prompt was reused from cache.
+
+## Choose where data is stored
+
+The database worker accepts a `dataDir` in `createWorkerDb` (or `createWebEnclave({ dataDir })`):
+
+| `dataDir` | Storage | Use it when |
+| --- | --- | --- |
+| `opfs://name` | Origin Private File System, through sync access handles | You want the fastest durable storage. Needs cross-origin isolation. |
+| `idb://name` | IndexedDB. The whole database is held in memory and flushed. | You can't send the cross-origin isolation headers. |
+| `memory://` | Nothing is saved | Tests and demos. |
+
+`opfs://` needs a second worker file. The database worker starts it:
+
+```ts
+// src/opfs-io.worker.ts: owns the OPFS file handles
+import { serveOpfsIo } from 'enclave-ai/pglite-opfs-io'; serveOpfsIo()
+
+// src/db.worker.ts
+import { servePGlite } from 'enclave-ai/pglite-worker'
+servePGlite({}, { opfsIo: () => new Worker(new URL('./opfs-io.worker.ts', import.meta.url), { type: 'module' }) })
+
+// main thread
+const db = await createWorkerDb(dbWorker, { dataDir: 'opfs://my-app', id: 'my-app' })
+```
+
+Why a second worker: Chromium reserves storage capacity for every open sync access handle that has been written to, and refuses writes once roughly 100–150 handles hold reservations. Postgres keeps hundreds of files, so a filesystem that leaves every file open fails with `QuotaExceededError`, even with gigabytes of quota free. This is what happens to PGlite's own `opfs-ahp://` backend, which surfaces as "errno 22". `opfs://` keeps at most 32 handles open (`maxOpenHandles`) and opens or closes the rest on demand. Opening a handle is asynchronous but Postgres needs synchronous file access, so the handles live in the I/O worker, and the database worker waits for each answer through shared memory.
+
+- **Requirements.** `SharedArrayBuffer`, so serve the app with `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` (or `credentialless`).
+- **Durability.** Data is flushed after every transaction. Directory changes are journaled, and a crash or closed tab replays the journal on the next start.
+- **Several tabs.** One tab's worker owns the database and the others send their queries to it. If that tab closes, another takes over.
+- **Startup failures.** If the database can't start, the worker reports why and exits, so it never holds the database lock. `createWorkerDb` rejects with the reason, or after `openTimeoutMs` (default 30 s) if a frozen tab elsewhere still holds it. It never waits forever.
+- **Vite.** Add `enclave-ai` to `optimizeDeps.exclude`, next to `@electric-sql/pglite`. Pre-bundling enclave-ai inlines a second copy of PGlite, and extensions then fail to load.
 
 ## Test your assistant
 
