@@ -57,6 +57,8 @@ export interface SearchOptions {
   minSimilarity?: number
   /** Use the configured reranker. Default true when one is configured. */
   rerank?: boolean
+  /** Only search these documents. */
+  documentIds?: string[]
 }
 
 export interface SearchHit {
@@ -222,7 +224,9 @@ export class Knowledge {
     if (!useVector && !useKeyword) return []
 
     const vector = useVector ? toVectorLiteral((await this.embedder.embed([query], 'query'))[0]!) : null
-    const scope = `($2::text[] is null or c.collection = any($2::text[])) and ($3::jsonb is null or d.metadata @> $3::jsonb)`
+    const scope =
+      `($2::text[] is null or c.collection = any($2::text[])) and ($3::jsonb is null or d.metadata @> $3::jsonb)` +
+      ` and ($7::text[] is null or c.document_id = any($7::text[]))`
 
     const { rows } = await this.db.query<{
       id: number
@@ -265,7 +269,7 @@ export class Knowledge {
          join enclave.documents d on d.id = c.document_id
        order by f.score desc
        limit $6`,
-      [vector, collections, filter, candidates, useKeyword ? tsquery : '', limit],
+      [vector, collections, filter, candidates, useKeyword ? tsquery : '', limit, options.documentIds ?? null],
     )
 
     const hits: SearchHit[] = rows

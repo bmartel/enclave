@@ -599,6 +599,24 @@ knowledgeSkill({
 })
 ```
 
+**Show the sources.** Every passage the model sees gets one number for the whole answer, whether it was found before the model started or by a search the model ran. Your UI receives the same numbers, so `[2]` in the text always maps to the same passage:
+
+```ts
+for await (const e of thread.send(question)) {
+  if (e.type === 'citations') showSources(e.citations)  // [{ n, documentId, title, source, content, metadata }]
+}
+const { text, citations } = await stream.result()       // also saved on the answer in thread.messages()
+```
+
+**Ask about some documents only.** Narrow one question to a collection, to documents whose metadata matches, or to specific documents, like picking sources in a notebook:
+
+```ts
+thread.send('Summarize these', { knowledge: { documentIds: ['report-q3', 'report-q4'] } })
+thread.send('What did HR decide?', { knowledge: { collection: 'handbook', filter: { team: 'hr' } } })
+```
+
+Your own tools can add sources to the same list with `ctx.cite(passages)`.
+
 Search directly:
 
 ```ts
@@ -798,6 +816,7 @@ Stored data (the database, chat history, search index and model cache) lives in 
 | `reasoning-delta` | Show the model's thinking (optional) |
 | `tool-call`, `tool-result` | Show what the assistant is doing |
 | `approval-request` | Ask the user to confirm an action |
+| `citations` | Show the sources the answer can cite as `[n]` (the full list so far) |
 | `custom` | Receive data a tool sent with `emit` |
 | `finish` | Know it's done: `stop`, `max-steps` or `aborted` |
 
@@ -811,7 +830,7 @@ for await (const e of stream) {
   if (e.type === 'text-delta') appendText(e.delta)
   if (e.type === 'tool-call') showTool(e.call.name)
 }
-const { text, steps, usage } = await stream.result()
+const { text, steps, usage, citations } = await stream.result()
 ```
 
 **Approvals.** Tools marked `needsApproval` wait for your `onApproval` handler, which you can also set once in `createWebEnclave`. With no handler, the action is declined, and the assistant says so rather than claiming it was done.

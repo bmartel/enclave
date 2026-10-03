@@ -3,18 +3,7 @@ import { Knowledge, type KnowledgeOptions } from './rag/knowledge.js'
 import type { Skill } from './skill.js'
 import { CORE_MIGRATIONS, migrate } from './store/migrate.js'
 import { assertLocality } from './privacy/index.js'
-import type {
-  AgentEvent,
-  ApprovalHandler,
-  Db,
-  Embedder,
-  FinishReason,
-  Locality,
-  Message,
-  Model,
-  Reranker,
-  Usage,
-} from './types.js'
+import type { AgentEvent, ApprovalHandler, Citation, Db, Embedder, FinishReason, KnowledgeScope, Locality, Message, Model, Reranker, Usage } from './types.js'
 import { uid } from './util.js'
 
 export interface EnclaveOptions {
@@ -53,6 +42,8 @@ export interface PrivacyPolicy {
 export interface RunOptions {
   signal?: AbortSignal
   onApproval?: ApprovalHandler
+  /** Limit knowledge retrieval for this run to some collections, metadata or documents. */
+  knowledge?: KnowledgeScope
 }
 
 export interface RunResult {
@@ -63,6 +54,8 @@ export interface RunResult {
   finishReason: FinishReason | 'max-steps' | 'aborted'
   steps: number
   usage: Usage
+  /** Passages the answer may cite as [n]. Empty when nothing was retrieved. */
+  citations: Citation[]
 }
 
 /**
@@ -73,6 +66,7 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
   private consumed = false
   private settled = false
   private readonly produced: Message[] = []
+  private citations: Citation[] = []
   private resolveResult!: (r: RunResult) => void
   private rejectResult!: (e: unknown) => void
   private readonly resultPromise = new Promise<RunResult>((resolve, reject) => {
@@ -90,6 +84,7 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
     try {
       for await (const event of this.source) {
         if (event.type === 'message') this.produced.push(event.message)
+        if (event.type === 'citations') this.citations = event.citations
         if (event.type === 'finish') {
           const last = this.produced.findLast((m) => m.role === 'assistant')
           this.settled = true
@@ -99,6 +94,7 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
             finishReason: event.reason,
             steps: event.steps,
             usage: event.usage,
+            citations: this.citations,
           })
         }
         yield event
@@ -172,6 +168,7 @@ export class Thread {
         activeSkills,
         signal: options.signal ?? new AbortController().signal,
         ...(options.onApproval ? { onApproval: options.onApproval } : {}),
+        ...(options.knowledge ? { scope: options.knowledge } : {}),
       })) {
         if (event.type === 'message') await this.persist(event.message)
         yield event
@@ -290,6 +287,7 @@ export class Enclave {
         activeSkills: new Set(),
         signal: options.signal ?? new AbortController().signal,
         ...(options.onApproval ? { onApproval: options.onApproval } : {}),
+        ...(options.knowledge ? { scope: options.knowledge } : {}),
       }),
     )
   }

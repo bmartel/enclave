@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { Db, Embedder, JSONSchema, ToolSpec } from './types.js'
+import type { Citation, CitationInput, Db, Embedder, JSONSchema, KnowledgeScope, ToolSpec } from './types.js'
 import type { Knowledge } from './rag/knowledge.js'
 
 /** Everything a tool can reach at execution time. */
@@ -14,6 +14,10 @@ export interface ToolContext {
   signal: AbortSignal
   /** Stream arbitrary data to the UI (surfaces as a `custom` agent event). */
   emit(data: unknown): void
+  /** Retrieval scope requested for this run (`send(…, { knowledge })`). */
+  scope?: KnowledgeScope
+  /** Register passages returned to the model; see SkillContext.cite. */
+  cite?(passages: CitationInput[]): Citation[]
 }
 
 export interface ToolDef<I extends z.ZodType = z.ZodType, O = unknown> {

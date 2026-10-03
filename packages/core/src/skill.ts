@@ -1,5 +1,5 @@
 import type { ToolDef } from './tool.js'
-import type { Db, Embedder, Message } from './types.js'
+import type { Citation, CitationInput, Db, Embedder, KnowledgeScope, Message } from './types.js'
 import type { Knowledge } from './rag/knowledge.js'
 
 export interface SkillContext {
@@ -9,6 +9,14 @@ export interface SkillContext {
   threadId: string | undefined
   /** Conversation so far (empty during setup). Lets `context` react to the latest request. */
   messages: readonly Message[]
+  /** Retrieval scope requested for this run (`send(…, { knowledge })`). */
+  scope?: KnowledgeScope
+  /**
+   * Register passages shown to the model and get them back numbered for
+   * citation. Numbers are stable for the run; the UI receives a `citations`
+   * event whenever the list grows. Absent outside a run (setup, direct calls).
+   */
+  cite?(passages: CitationInput[]): Citation[]
 }
 
 /**

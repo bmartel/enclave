@@ -5,9 +5,12 @@ import type {
   AgentEvent,
   ApprovalHandler,
   AssistantMessage,
+  Citation,
+  CitationInput,
   Db,
   Embedder,
   FinishReason,
+  KnowledgeScope,
   Message,
   Model,
   StepMetrics,
@@ -81,6 +84,38 @@ export interface RunState {
   activeSkills: Set<string>
   signal: AbortSignal
   onApproval?: ApprovalHandler
+  /** Retrieval scope for this run, passed to skills and tools. */
+  scope?: KnowledgeScope
+}
+
+/** One numbered citation list per run, shared by every skill and tool. */
+function citationLedger() {
+  const list: Citation[] = []
+  const same = (a: CitationInput, b: Citation) =>
+    a.documentId === b.documentId && (a.chunkId !== undefined || b.chunkId !== undefined ? a.chunkId === b.chunkId : a.content === b.content)
+  return {
+    list,
+    cite(passages: CitationInput[], push: (event: AgentEvent) => void): Citation[] {
+      let grew = false
+      const out = passages.map((p) => {
+        const existing = list.find((c) => same(p, c))
+        if (existing) return existing
+        const added: Citation = { ...p, n: list.length + 1 }
+        list.push(added)
+        grew = true
+        return added
+      })
+      if (grew) push({ type: 'citations', citations: [...list] })
+      return out
+    },
+  }
+}
+
+/** Citations are for the UI; models get the plain message. */
+const forModel = (m: Message): Message => {
+  if (m.role !== 'assistant' || !m.citations) return m
+  const { citations: _ui, ...rest } = m
+  return rest
 }
 
 /**
@@ -89,12 +124,16 @@ export interface RunState {
  */
 export async function* runAgent(rt: AgentRuntime, state: RunState): AsyncGenerator<AgentEvent, void> {
   const usage: Usage = { inputTokens: 0, outputTokens: 0 }
+  const ledger = citationLedger()
+  const pending: AgentEvent[] = []
   const skillCtx: SkillContext = {
     db: rt.db,
     knowledge: rt.knowledge,
     embedder: rt.embedder,
     threadId: state.threadId,
     messages: state.history,
+    ...(state.scope ? { scope: state.scope } : {}),
+    cite: (passages) => ledger.cite(passages, (event) => pending.push(event)),
   }
 
   const seen = new Map<string, number>()
@@ -112,6 +151,7 @@ export async function* runAgent(rt: AgentRuntime, state: RunState): AsyncGenerat
     const dormant = rt.registry.dormant(state.activeSkills)
     const tools = toolSpecs(visible, dormant)
     const context = await buildContext(visible, skillCtx)
+    yield* pending.splice(0)
     const system = buildSystem(rt.system, visible, dormant)
     const budget = contextBudget(rt.model.contextWindow, system, context, tools)
     const toolOutputChars = budget ? Math.min(rt.maxToolOutputChars, Math.max(800, Math.floor(budget * 0.3))) : rt.maxToolOutputChars
@@ -129,7 +169,7 @@ export async function* runAgent(rt: AgentRuntime, state: RunState): AsyncGenerat
       for await (const chunk of rt.model.stream({
         system,
         context,
-        messages: fitHistory(state.history, rt.maxHistory, budget),
+        messages: fitHistory(state.history.map(forModel), rt.maxHistory, budget),
         tools,
         signal: state.signal,
       })) {
@@ -168,6 +208,7 @@ export async function* runAgent(rt: AgentRuntime, state: RunState): AsyncGenerat
     if (calls.length) assistant.toolCalls = calls
     if (reasoning) assistant.reasoning = reasoning
     if (providerData) assistant.providerData = providerData
+    if (!calls.length && ledger.list.length) assistant.citations = [...ledger.list]
     state.history.push(assistant)
     yield { type: 'message', message: assistant }
     yield {
@@ -203,7 +244,7 @@ export async function* runAgent(rt: AgentRuntime, state: RunState): AsyncGenerat
       lastSignature = signature
       const result: ToolMessage = repeated
         ? yield* repeatedCall(call)
-        : yield* executeCall(rt, state, call, toolOutputChars)
+        : yield* executeCall(rt, state, call, toolOutputChars, ledger.cite)
       state.history.push(result)
       yield { type: 'message', message: result }
     }
@@ -243,7 +284,7 @@ async function* executeCall(
   state: RunState,
   call: ToolCall,
   maxOutputChars: number,
-): AsyncGenerator<AgentEvent, ToolMessage> {
+  cite: ReturnType<typeof citationLedger>['cite'],): AsyncGenerator<AgentEvent, ToolMessage> {
   const started = performance.now()
   const reply = (_output: unknown, modelOutput: unknown, isError: boolean): ToolMessage => ({
     role: 'tool',
@@ -277,6 +318,8 @@ async function* executeCall(
       skill: entry.skill.name,
       signal: state.signal,
       emit: (data) => emit({ type: 'custom', skill: entry.skill.name, tool: call.name, data }),
+      ...(state.scope ? { scope: state.scope } : {}),
+      cite: (passages) => cite(passages, emit),
     }
 
     const gate = entry.def.needsApproval

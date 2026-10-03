@@ -35,6 +35,39 @@ export interface AssistantMessage {
   reasoning?: string
   /** Opaque provider payload (e.g. signed thinking blocks) replayed verbatim to the same provider. */
   providerData?: { provider: string; data: unknown }
+  /**
+   * The passages this answer could cite as [n], set on a run's final message.
+   * For the UI and thread history; never sent to the model.
+   */
+  citations?: Citation[]
+}
+
+/** A passage the model was shown, numbered so it can cite it inline as `[n]`. */
+export interface Citation {
+  /** The number the model uses. Stable for the whole run: auto-retrieval and every search share one sequence. */
+  n: number
+  documentId: string
+  chunkId?: number
+  collection?: string
+  title?: string | null
+  source?: string | null
+  content: string
+  metadata?: Record<string, unknown>
+}
+
+/** A passage to register with `cite()`; the run assigns its number. */
+export type CitationInput = Omit<Citation, 'n'>
+
+/**
+ * Narrow knowledge retrieval for one run, e.g. the sources a user picked:
+ * `thread.send(question, { knowledge: { documentIds: [...] } })`.
+ */
+export interface KnowledgeScope {
+  collection?: string | string[]
+  /** Match documents whose metadata contains this object (jsonb `@>`). */
+  filter?: Record<string, unknown>
+  /** Only these documents. */
+  documentIds?: string[]
 }
 
 export interface ToolMessage {
@@ -179,6 +212,8 @@ export type AgentEvent =
   | { type: 'approval-request'; call: ToolCall }
   | { type: 'tool-result'; call: ToolCall; output: unknown; isError: boolean; durationMs: number }
   | { type: 'custom'; skill: string; tool: string; data: unknown }
+  /** The run's citation list grew; carries the full list so far. */
+  | { type: 'citations'; citations: Citation[] }
   | { type: 'message'; message: Message }
   | { type: 'step-finish'; step: number; reason: FinishReason; durationMs: number; usage?: Usage; metrics?: StepMetrics }
   | { type: 'finish'; reason: FinishReason | 'max-steps' | 'aborted'; steps: number; usage: Usage }
