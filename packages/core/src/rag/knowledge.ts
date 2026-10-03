@@ -43,6 +43,8 @@ export interface IngestOptions {
 export interface IngestResult {
   documents: number
   chunks: number
+  /** Documents whose metadata changed but text did not (updated without re-embedding). */
+  updated: number
   /** Unchanged documents skipped via content hash. */
   skipped: number
 }
@@ -159,20 +161,30 @@ export class Knowledge {
   async ingest(input: IngestDocument | IngestDocument[], options: IngestOptions = {}): Promise<IngestResult> {
     await this.init()
     const docs = Array.isArray(input) ? input : [input]
-    const result: IngestResult = { documents: 0, chunks: 0, skipped: 0 }
+    const result: IngestResult = { documents: 0, chunks: 0, updated: 0, skipped: 0 }
 
     for (const [index, doc] of docs.entries()) {
       options.signal?.throwIfAborted()
       const collection = doc.collection ?? options.collection ?? 'default'
       const id = doc.id ?? `doc_${(await sha256(doc.source ?? doc.content)).slice(0, 24)}`
-      const hash = await sha256(JSON.stringify([collection, doc.title ?? '', doc.metadata ?? {}, doc.content]))
+      // "<text hash>:<metadata hash>": a metadata-only change (a note moved to
+      // another folder, retagged) updates the row without re-embedding.
+      const textHash = await sha256(JSON.stringify([collection, doc.title ?? '', doc.content]))
+      const hash = `${textHash}:${(await sha256(JSON.stringify(doc.metadata ?? {}))).slice(0, 16)}`
 
       const existing = await this.db.query<{ content_hash: string }>(
         'select content_hash from enclave.documents where id = $1',
         [id],
       )
-      if (existing.rows[0]?.content_hash === hash) {
+      const previous = existing.rows[0]?.content_hash
+      if (previous === hash) {
         result.skipped++
+      } else if (previous?.split(':')[0] === textHash) {
+        await this.db.query(
+          `update enclave.documents set source = $2, metadata = $3, content_hash = $4, updated_at = now() where id = $1`,
+          [id, doc.source ?? null, JSON.stringify(doc.metadata ?? {}), hash],
+        )
+        result.updated++
       } else {
         const pieces = chunkText(doc.content, { ...this.options.chunk, ...options.chunk })
         // Each chunk carries its document title into the embedding.

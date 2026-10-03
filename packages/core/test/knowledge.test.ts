@@ -44,10 +44,22 @@ describe('Knowledge', () => {
 
   it('skips unchanged documents and replaces changed ones', async () => {
     const again = await kb.ingest({ id: 'vpn', title: 'VPN setup', content: 'Install the client and sign in with your badge number to reach the intranet.', metadata: { team: 'it' } }, { collection: 'handbook' })
-    expect(again).toEqual({ documents: 0, chunks: 0, skipped: 1 })
+    expect(again).toEqual({ documents: 0, chunks: 0, updated: 0, skipped: 1 })
     const changed = await kb.ingest({ id: 'vpn', title: 'VPN setup', content: 'Use the new zero trust agent instead.', metadata: { team: 'it' }, collection: 'handbook' })
     expect(changed.documents).toBe(1)
     expect((await kb.search('zero trust agent'))[0]?.content).toContain('zero trust')
+  })
+
+  it('updates metadata without re-embedding when only metadata changes', async () => {
+    const before = await db.query<{ id: number }>(`select id from enclave.chunks where document_id = 'vpn'`)
+    const moved = await kb.ingest({ id: 'vpn', title: 'VPN setup', content: 'Use the new zero trust agent instead.', metadata: { team: 'security' }, collection: 'handbook' })
+    expect(moved).toEqual({ documents: 0, chunks: 0, updated: 1, skipped: 0 })
+    const after = await db.query<{ id: number }>(`select id from enclave.chunks where document_id = 'vpn'`)
+    expect(after.rows).toEqual(before.rows) // same chunk rows: nothing re-embedded
+    expect((await kb.search('zero trust', { filter: { team: 'security' } })).map((h) => h.documentId)).toEqual(['vpn'])
+    expect(await kb.search('zero trust', { filter: { team: 'it' } })).toEqual([])
+    const back = await kb.ingest({ id: 'vpn', title: 'VPN setup', content: 'Use the new zero trust agent instead.', metadata: { team: 'it' }, collection: 'handbook' })
+    expect(back.updated).toBe(1)
   })
 
   it('lists collections and removes documents', async () => {
