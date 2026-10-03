@@ -3,6 +3,7 @@
  * or in-thread. One instance caches every loaded model and serializes inference,
  * so embeddings, reranking and generation can share a single worker and GPU.
  */
+import { toModelLoadError } from '../models/load-error.js'
 
 export type DtypeSpec = string | { webgpu: string; webgpuF32: string; wasm: string }
 export type DevicePreference = 'auto' | 'webgpu' | 'wasm'
@@ -140,7 +141,8 @@ export class TransformersRuntime {
     if (!entry) {
       entry = load().catch((error) => {
         this.loaded.delete(key)
-        throw error
+        // Keys are `${kind}:${model}:…`: the second part names the model.
+        throw toModelLoadError(error, key.split(':')[1] ?? key)
       })
       this.loaded.set(key, entry)
     }

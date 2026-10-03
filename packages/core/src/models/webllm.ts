@@ -1,4 +1,5 @@
 import { reasoningLoops } from '../util.js'
+import { toModelLoadError } from './load-error.js'
 import type { AppConfig, CompletionUsage, InitProgressReport, MLCEngineInterface } from '@mlc-ai/web-llm'
 import type { Downloadable, Model, ToolSpec } from '../types.js'
 import { findLLM } from '../web/catalog.js'
@@ -160,6 +161,8 @@ export function webllm(options: WebLLMOptions): WebLLMModel {
         slot.loaded = key
       })
       await slot.loading
+    } catch (error) {
+      throw toModelLoadError(error, options.model)
     } finally {
       if (options.onProgress) slot.progress.delete(options.onProgress)
     }

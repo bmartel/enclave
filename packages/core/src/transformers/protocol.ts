@@ -1,3 +1,4 @@
+import { ModelLoadError, type ModelLoadReason } from '../models/load-error.js'
 import {
   TransformersRuntime,
   type EmbedConfig,
@@ -23,7 +24,7 @@ export type Response =
   | { type: 'progress'; progress: LoadProgress }
   | { type: 'text'; id: number; text: string }
   | { type: 'result'; id: number; value: unknown }
-  | { type: 'error'; id: number; error: string }
+  | { type: 'error'; id: number; error: string; name?: string; reason?: ModelLoadReason; model?: string }
 
 /**
  * Where Transformers.js work runs: a worker (recommended) or this thread.
@@ -83,7 +84,7 @@ function workerBackend(worker: Worker): Backend {
     if (!entry) return
     if (msg.type === 'text') return entry.onText?.(msg.text)
     pending.delete(msg.id)
-    if (msg.type === 'error') entry.reject(new Error(msg.error))
+    if (msg.type === 'error') entry.reject(reviveError(msg))
     else entry.resolve(msg.value)
   })
 
@@ -169,7 +170,23 @@ export function serveTransformers(): void {
       }
       scope.postMessage({ type: 'result', id, value })
     } catch (error) {
-      scope.postMessage({ type: 'error', id, error: error instanceof Error ? error.message : String(error) })
+      scope.postMessage({
+        type: 'error',
+        id,
+        error: error instanceof Error ? error.message : String(error),
+        ...(error instanceof Error ? { name: error.name } : {}),
+        ...(error instanceof ModelLoadError ? { reason: error.reason, model: error.model } : {}),
+      })
     }
   })
+}
+
+/** Rebuild a worker error on this side, keeping its name and load details. */
+export function reviveError(msg: { error: string; name?: string; reason?: ModelLoadReason; model?: string }): Error {
+  if (msg.name === 'ModelLoadError' && msg.reason && msg.model) {
+    const revived = new ModelLoadError(msg.reason, msg.model)
+    if (msg.reason === 'unknown') revived.message = msg.error
+    return revived
+  }
+  return Object.assign(new Error(msg.error), msg.name ? { name: msg.name } : {})
 }

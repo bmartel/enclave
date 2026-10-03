@@ -864,6 +864,14 @@ await ai.modelCache.clear('llm', 'qwen3-8b')
 ```
 
 - `cached: true` means every file the device needs is stored, so it works offline.
+- When a model can't download or start, you get a `ModelLoadError`. Its `reason` (`storage`, `webgpu`, `gpu-memory`, `network` or `unknown`) tells you what to offer, and its `message` is written for users:
+
+```ts
+import { ModelLoadError } from 'enclave-ai'
+try { await ai.run(question).text() } catch (e) {
+  if (e instanceof ModelLoadError) showProblem(e.message, e.reason === 'network' ? 'Retry' : undefined)
+}
+```
 - The model picked automatically on a first visit is capped at a 2.5 GB download (`maxDownloadMB`).
 - Test offline behavior on `127.0.0.1` or a real hostname. WebLLM doesn't cache some files served from `localhost`.
 
