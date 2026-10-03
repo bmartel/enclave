@@ -50,6 +50,28 @@ describe('Knowledge', () => {
     expect((await kb.search('zero trust agent'))[0]?.content).toContain('zero trust')
   })
 
+  it('embeds chunks from many documents in shared batches, in order', async () => {
+    const inner = hashEmbedder(32)
+    const calls: number[] = []
+    const counting = { ...inner, id: inner.id, dimensions: inner.dimensions, embed: (texts: string[], kind: 'query' | 'document') => (calls.push(texts.length), inner.embed(texts, kind)) }
+    const own = await memoryDb()
+    await migrate(own, 'core', CORE_MIGRATIONS)
+    const kb2 = new Knowledge(own, counting, { batchSize: 16 })
+    const docs = Array.from({ length: 40 }, (_, i) => ({ id: `batch-${i}`, title: `Doc ${i}`, content: `Short note number ${i} about batching.` }))
+    const progress: string[] = []
+    const r = await kb2.ingest(docs, { collection: 'batching', onProgress: (p) => progress.push(p.document) })
+    expect(r).toMatchObject({ documents: 40, chunks: 40 })
+    expect(calls.every((n) => n <= 16)).toBe(true)
+    expect(calls.length).toBeLessThanOrEqual(3) // 40 one-chunk docs in batches of 16, not 40 calls
+    expect(progress).toEqual(docs.map((d) => d.id))
+    expect((await kb2.search('note number 7 batching', { collection: 'batching', mode: 'keyword' }))[0]?.documentId).toBe('batch-7')
+    // Unchanged documents are skipped without embedding.
+    calls.length = 0
+    expect((await kb2.ingest(docs, { collection: 'batching' })).skipped).toBe(40)
+    expect(calls).toEqual([])
+    await own.close()
+  })
+
   it('updates metadata without re-embedding when only metadata changes', async () => {
     const before = await db.query<{ id: number }>(`select id from enclave.chunks where document_id = 'vpn'`)
     const moved = await kb.ingest({ id: 'vpn', title: 'VPN setup', content: 'Use the new zero trust agent instead.', metadata: { team: 'security' }, collection: 'handbook' })

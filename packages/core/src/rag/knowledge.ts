@@ -162,15 +162,67 @@ export class Knowledge {
     await this.init()
     const docs = Array.isArray(input) ? input : [input]
     const result: IngestResult = { documents: 0, chunks: 0, updated: 0, skipped: 0 }
+    const batchSize = this.options.batchSize ?? 32
+
+    // Documents to embed are pooled so the embedder gets full batches of
+    // chunks across documents (a note is often 1-3 chunks; embedding each on
+    // its own left the GPU mostly idle), then written in one transaction.
+    type Pending = { index: number; id: string; collection: string; doc: IngestDocument; hash: string; pieces: string[] }
+    let pending: Pending[] = []
+    let pooled = 0
+    let reported = 0
+    const ids: string[] = []
+    const report = (upTo: number) => {
+      for (; reported < upTo; reported++) options.onProgress?.({ done: reported + 1, total: docs.length, document: ids[reported] ?? '' })
+    }
+
+    const flush = async () => {
+      if (!pending.length) return
+      const inputs = pending.flatMap((p) => p.pieces.map((piece) => this.format(piece, p.doc.title)))
+      const vectors = await this.embedBatched(inputs, 'document', options.signal)
+      let at = 0
+      await this.db.transaction(async (tx) => {
+        for (const p of pending) {
+          const own = vectors.slice(at, at + p.pieces.length)
+          at += p.pieces.length
+          await tx.query(
+            `insert into enclave.documents (id, collection, title, source, metadata, content_hash, chunk_count)
+             values ($1, $2, $3, $4, $5, $6, $7)
+             on conflict (id) do update set
+               collection = excluded.collection, title = excluded.title, source = excluded.source,
+               metadata = excluded.metadata, content_hash = excluded.content_hash,
+               chunk_count = excluded.chunk_count, updated_at = now()`,
+            [p.id, p.collection, p.doc.title ?? null, p.doc.source ?? null, JSON.stringify(p.doc.metadata ?? {}), p.hash, p.pieces.length],
+          )
+          await tx.query('delete from enclave.chunks where document_id = $1', [p.id])
+          if (p.pieces.length) {
+            await tx.query(
+              `insert into enclave.chunks (document_id, collection, ordinal, content, embedding)
+               select $1, $2, (t.ord - 1)::int, t.content, t.embedding::vector
+               from unnest($3::text[], $4::text[]) with ordinality as t(content, embedding, ord)`,
+              [p.id, p.collection, p.pieces, own.map(toVectorLiteral)],
+            )
+          }
+          result.documents++
+          result.chunks += p.pieces.length
+        }
+      })
+      report(pending.at(-1)!.index + 1)
+      pending = []
+      pooled = 0
+    }
 
     for (const [index, doc] of docs.entries()) {
       options.signal?.throwIfAborted()
       const collection = doc.collection ?? options.collection ?? 'default'
       const id = doc.id ?? `doc_${(await sha256(doc.source ?? doc.content)).slice(0, 24)}`
+      ids[index] = id
       // "<text hash>:<metadata hash>": a metadata-only change (a note moved to
       // another folder, retagged) updates the row without re-embedding.
       const textHash = await sha256(JSON.stringify([collection, doc.title ?? '', doc.content]))
       const hash = `${textHash}:${(await sha256(JSON.stringify(doc.metadata ?? {}))).slice(0, 16)}`
+      // A document repeated in one call: write what's pooled first, in order.
+      if (pending.some((p) => p.id === id)) await flush()
 
       const existing = await this.db.query<{ content_hash: string }>(
         'select content_hash from enclave.documents where id = $1',
@@ -179,43 +231,23 @@ export class Knowledge {
       const previous = existing.rows[0]?.content_hash
       if (previous === hash) {
         result.skipped++
+        if (!pending.length) report(index + 1)
       } else if (previous?.split(':')[0] === textHash) {
         await this.db.query(
           `update enclave.documents set source = $2, metadata = $3, content_hash = $4, updated_at = now() where id = $1`,
           [id, doc.source ?? null, JSON.stringify(doc.metadata ?? {}), hash],
         )
         result.updated++
+        if (!pending.length) report(index + 1)
       } else {
         const pieces = chunkText(doc.content, { ...this.options.chunk, ...options.chunk })
-        // Each chunk carries its document title into the embedding.
-        const embedInputs = pieces.map((p) => this.format(p, doc.title))
-        const vectors = await this.embedBatched(embedInputs, 'document', options.signal)
-
-        await this.db.transaction(async (tx) => {
-          await tx.query(
-            `insert into enclave.documents (id, collection, title, source, metadata, content_hash, chunk_count)
-             values ($1, $2, $3, $4, $5, $6, $7)
-             on conflict (id) do update set
-               collection = excluded.collection, title = excluded.title, source = excluded.source,
-               metadata = excluded.metadata, content_hash = excluded.content_hash,
-               chunk_count = excluded.chunk_count, updated_at = now()`,
-            [id, collection, doc.title ?? null, doc.source ?? null, JSON.stringify(doc.metadata ?? {}), hash, pieces.length],
-          )
-          await tx.query('delete from enclave.chunks where document_id = $1', [id])
-          if (pieces.length) {
-            await tx.query(
-              `insert into enclave.chunks (document_id, collection, ordinal, content, embedding)
-               select $1, $2, (t.ord - 1)::int, t.content, t.embedding::vector
-               from unnest($3::text[], $4::text[]) with ordinality as t(content, embedding, ord)`,
-              [id, collection, pieces, vectors.map(toVectorLiteral)],
-            )
-          }
-        })
-        result.documents++
-        result.chunks += pieces.length
+        pending.push({ index, id, collection, doc, hash, pieces })
+        pooled += pieces.length
+        if (pooled >= batchSize) await flush()
       }
-      options.onProgress?.({ done: index + 1, total: docs.length, document: id })
     }
+    await flush()
+    report(docs.length)
     return result
   }
 
