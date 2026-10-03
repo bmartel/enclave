@@ -15,6 +15,7 @@ export type {
   CollectionInfo,
 } from './rag/knowledge.js'
 export { chunkText, type ChunkOptions } from './rag/chunk.js'
+export { synthesize, citedNumbers, type SynthesisEvent, type SynthesisSource, type SynthesizeOptions } from './rag/synthesize.js'
 export { migrate } from './store/migrate.js'
 export { fromTextModel, renderMessages, TaggedStreamParser, type TextModel, type TextRequest } from './models/text-protocol.js'
 export { fallback } from './models/fallback.js'

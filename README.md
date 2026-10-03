@@ -626,6 +626,25 @@ const hits = await ai.knowledge!.search('parental leave notice period', { limit:
 
 Text inside documents is treated as data, not instructions. Paragraphs that try to instruct the assistant ("ignore previous instructions…") are removed before the model sees them.
 
+### Write from many documents
+
+`synthesize()` writes one result (a study guide, briefing, FAQ, timeline) from all the documents you give it, even when they're far bigger than the model's context window. It numbers the passages, reads them in batches that fit, condenses cited notes, then streams the result with `[n]` citations that map back to the passages:
+
+```ts
+import { synthesize } from 'enclave-ai'
+
+for await (const e of synthesize({
+  model: ai.model,
+  sources: notes.map((n) => ({ id: n.id, title: n.title, content: n.body })),
+  instruction: 'Write a briefing document: a summary, then the key points as headed sections.',
+  focus: 'decisions, owners and dates',   // what to keep when condensing (optional)
+})) {
+  if (e.type === 'progress') showProgress(e.stage, e.done, e.total)  // reading → condensing → writing
+  if (e.type === 'text-delta') append(e.delta)
+  if (e.type === 'finish') showSources(e.citations)                 // the passages the text cites
+}
+```
+
 ## Answer questions with SQL
 
 Every assistant has a Postgres 17 database, stored in the browser. Your app can use it directly:
