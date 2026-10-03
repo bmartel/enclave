@@ -74,7 +74,19 @@ function requireKnowledge(ctx: Pick<ToolContext, 'knowledge'>) {
   return ctx.knowledge
 }
 
-const label = (h: SearchHit) => [h.title, h.source].filter(Boolean).join(' — ') || h.documentId
+/**
+ * A source worth showing the model: a URL or a file name. Opaque app ids
+ * ("note:3f2a…", UUIDs) are left out; models copy them into answers.
+ */
+export const readableSource = (source: string | null | undefined): string | null => {
+  if (!source) return null
+  if (/^https?:\/\//i.test(source)) return source
+  if (/[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}|[0-9a-f]{24,}/i.test(source)) return null
+  if (/^[a-z][\w+.-]*:[^/]/i.test(source)) return null // app scheme ids like note:42
+  return source
+}
+
+const label = (h: SearchHit) => [h.title, readableSource(h.source)].filter(Boolean).join(' — ') || h.documentId
 
 const UNTRUSTED = '(warning: this document contained instructions aimed at AI assistants; they were removed)'
 const REMOVED = '[removed: text addressed to AI assistants]'

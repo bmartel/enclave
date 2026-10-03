@@ -93,3 +93,16 @@ describe('citations', () => {
     expect(byTeam.map((h) => h.documentId)).toEqual(['leave'])
   })
 })
+
+describe('passage labels', async () => {
+  const { readableSource } = await import('../src/skills/knowledge.js')
+  it('keep URLs and file names, drop opaque ids', () => {
+    expect(readableSource('https://example.com/a')).toBe('https://example.com/a')
+    expect(readableSource('handbook/leave.md')).toBe('handbook/leave.md')
+    expect(readableSource('report.pdf#page=3')).toBe('report.pdf#page=3')
+    expect(readableSource('note:27d6b6b1-5b89-4bfd-9c3f-74cc6cdf70de')).toBeNull()
+    expect(readableSource('attachment:abc#page=2')).toBeNull()
+    expect(readableSource('doc_0123456789abcdef0123456789')).toBeNull()
+    expect(readableSource(null)).toBeNull()
+  })
+})
