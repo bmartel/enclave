@@ -1,6 +1,6 @@
 {
   "name": "enclave-ai",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "AI agents that run in your user's browser: answers from documents, SQL over local data, and your own tools, with nothing sent to a server.",
   "keywords": [
     "ai",
