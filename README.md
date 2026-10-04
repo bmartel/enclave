@@ -891,6 +891,15 @@ try { await ai.run(question).text() } catch (e) {
   if (e instanceof ModelLoadError) showProblem(e.message, e.reason === 'network' ? 'Retry' : undefined)
 }
 ```
+- A `storage` failure doesn't always mean the disk is full. Browsers sometimes refuse writes while still reporting gigabytes free (Chrome does this after updating itself underneath a running browser, and some profiles get stuck with a cap of a few hundred MB). `checkStorage()` writes a small file to OPFS and to Cache Storage; when writes are refused despite free quota, `refusing` is true and `message` tells the user to restart the browser or use another profile:
+
+```ts
+import { checkStorage, ModelLoadError } from 'enclave-ai'
+if (e instanceof ModelLoadError && e.reason === 'storage') {
+  const check = await checkStorage()
+  showProblem(check.refusing ? check.message : e.message)
+}
+```
 - The model picked automatically on a first visit is capped at a 2.5 GB download (`maxDownloadMB`).
 - Test offline behavior on `127.0.0.1` or a real hostname. WebLLM doesn't cache some files served from `localhost`.
 
