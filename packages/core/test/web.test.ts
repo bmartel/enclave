@@ -76,4 +76,32 @@ describe('tool-call grammar', () => {
       end: '}\n</tool_call>',
     })
   })
+
+  it('drops string length limits, which stop the model writing escapes like \\n', async () => {
+    const { toolCallStructuralTag, grammarSchema } = await import('../src/models/webllm.js')
+    const schema = {
+      type: 'object',
+      properties: {
+        code: { type: 'string', minLength: 1, maxLength: 10000, description: 'A program' },
+        lines: { type: 'array', minItems: 1, items: { type: 'string', minLength: 1 } },
+        mode: { type: 'string', enum: ['a', 'b'] },
+        nested: { anyOf: [{ type: 'string', minLength: 2 }, { type: 'null' }] },
+        minLength: { type: 'number' },
+      },
+      required: ['code'],
+    }
+    expect(grammarSchema(schema)).toEqual({
+      type: 'object',
+      properties: {
+        code: { type: 'string', description: 'A program' },
+        lines: { type: 'array', minItems: 1, items: { type: 'string' } },
+        mode: { type: 'string', enum: ['a', 'b'] },
+        nested: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+        minLength: { type: 'number' },
+      },
+      required: ['code'],
+    })
+    const tag = toolCallStructuralTag([{ name: 'run_code', description: '', inputSchema: schema }]) as any
+    expect(JSON.stringify(tag)).not.toMatch(/"minLength":\d/)
+  })
 })

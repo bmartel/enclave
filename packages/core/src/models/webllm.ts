@@ -113,9 +113,36 @@ export function resolveWebLLMId(model: string, shaderF16 = true): string {
 }
 
 /**
+ * A JSON schema as the decoding grammar gets it: string length limits
+ * (minLength/maxLength) are dropped. xgrammar compiles a length-limited string
+ * to a character class without JSON escapes, so the model cannot write `\n`
+ * or `\"` inside it: code and multi-line text came out on one line, or with
+ * "/n" where the line breaks belonged. The limits are still enforced when the
+ * tool's input is validated.
+ */
+const SCHEMA_MAPS = new Set(['properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas'])
+
+export function grammarSchema(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(grammarSchema)
+  if (!schema || typeof schema !== 'object') return schema
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(schema)) {
+    if (key === 'minLength' || key === 'maxLength') continue
+    if (SCHEMA_MAPS.has(key) && value && typeof value === 'object') {
+      // Names → schemas: keep every name (a property may well be called "minLength").
+      out[key] = Object.fromEntries(Object.entries(value).map(([name, sub]) => [name, grammarSchema(sub)]))
+    } else {
+      // enum/const/default/examples hold data, not schemas.
+      out[key] = key === 'enum' || key === 'const' || key === 'default' || key === 'examples' ? value : grammarSchema(value)
+    }
+  }
+  return out
+}
+
+/**
  * xgrammar structural tag: text is free, but once the model writes
  * `<tool_call>` it must complete a call to a real tool with arguments that
- * validate against that tool's JSON schema.
+ * validate against that tool's JSON schema (see grammarSchema).
  */
 export function toolCallStructuralTag(tools: ToolSpec[]): object {
   return {
@@ -126,7 +153,7 @@ export function toolCallStructuralTag(tools: ToolSpec[]): object {
       tags: tools.map((t) => ({
         type: 'tag',
         begin: `<tool_call>\n{"name": ${JSON.stringify(t.name)}, "arguments": `,
-        content: { type: 'json_schema', json_schema: t.inputSchema },
+        content: { type: 'json_schema', json_schema: grammarSchema(t.inputSchema) },
         end: '}\n</tool_call>',
       })),
     },
