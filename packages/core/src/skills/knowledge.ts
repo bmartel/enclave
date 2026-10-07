@@ -52,6 +52,17 @@ export interface AutoRetrieveOptions {
    * one was needed. Default true.
    */
   followRoles?: boolean
+  /**
+   * Keyword rescue: when the best vector match falls just short of the floor
+   * (within this fraction of the range above it, `floor - (1 - floor) × keywordRescue`),
+   * keep it anyway if keyword search ranks the same passage among its top 3.
+   * Short tabular or list passages ("item: conference tickets; cost: 650")
+   * embed far from a natural question about them, while their exact words
+   * match; two independent signals agreeing is what lets them in, so
+   * chit-chat (no keyword match on the vector's pick) stays silent. 0 or
+   * false turns it off. Default 0.1.
+   */
+  keywordRescue?: number | false
 }
 
 const ASKS_FOR_PERSON = /\b(who|whom|whose|name|contact)\b/i
@@ -176,18 +187,29 @@ export function knowledgeSkill(options: KnowledgeSkillOptions = {}) {
     return found.filter((h) => (h.similarity ?? 0) >= cutoff)
   }
 
-  const search = async (knowledge: Knowledge, query: string, run?: KnowledgeScope) => {
+  /** The best vector match just under the floor, when keyword search agrees it's the passage (see `keywordRescue`). */
+  const rescue = async (knowledge: Knowledge, query: string, hits: SearchHit[], scope: string[], run?: KnowledgeScope): Promise<SearchHit[]> => {
+    const margin = auto?.keywordRescue === false ? 0 : (auto?.keywordRescue ?? 0.1)
+    if (!margin || !hits.length || hits.some((h) => h.rerankScore !== undefined)) return []
+    const floor = auto?.minSimilarity ?? knowledge.embedder.relevanceFloor ?? 0.35
+    const best = hits.reduce((a, b) => ((b.similarity ?? 0) > (a.similarity ?? 0) ? b : a))
+    if ((best.similarity ?? 0) < floor - (1 - floor) * margin) return []
+    const keyword = await knowledge.search(query, { mode: 'keyword', limit: 3, collection: scope, ...narrowing(run) })
+    return keyword.some((k) => k.chunkId === best.chunkId) ? [best] : []
+  }
+
+  /** `withRescue`: when nothing reaches the floor, try the keyword rescue (the last resort, after the follow-up retry). */
+  const search = async (knowledge: Knowledge, query: string, run?: KnowledgeScope, withRescue = false) => {
     const scope = await scopeOf(knowledge, undefined, run)
     if (!scope.length) return []
-    const found = relevant(
-      knowledge,
-      await knowledge.search(query, {
-        limit: auto?.limit ?? 3,
-        minSimilarity: options.minSimilarity ?? 0.2,
-        collection: scope,
-        ...narrowing(run),
-      }),
-    )
+    const hits = await knowledge.search(query, {
+      limit: auto?.limit ?? 3,
+      minSimilarity: options.minSimilarity ?? 0.2,
+      collection: scope,
+      ...narrowing(run),
+    })
+    let found = relevant(knowledge, hits)
+    if (!found.length && withRescue) found = await rescue(knowledge, query, hits, scope, run)
     if (auto?.followRoles === false || !found.length || !ASKS_FOR_PERSON.test(query)) return found
     // One hop: role titles in the best passage that the question doesn't name.
     const floor = auto?.minSimilarity ?? knowledge.embedder.relevanceFloor ?? 0.35
@@ -212,10 +234,14 @@ export function knowledgeSkill(options: KnowledgeSkillOptions = {}) {
       if (retrieved.size > 32) retrieved.clear()
       hits = (async () => {
         const found = await search(knowledge, latest, run)
+        if (found.length) return found
         // A follow-up like "how much does it cost?" means little on its own:
         // retry with the previous question for context.
-        if (found.length || !previous || wordCount(latest) > 12) return found
-        return search(knowledge, `${previous}\n${latest}`, run)
+        if (previous && wordCount(latest) <= 12) {
+          const withPrevious = await search(knowledge, `${previous}\n${latest}`, run)
+          if (withPrevious.length) return withPrevious
+        }
+        return search(knowledge, latest, run, true)
       })().then((found) =>
         // Passages that try to instruct the assistant only ride along when
         // they are the best match (e.g. the user asked about that document).

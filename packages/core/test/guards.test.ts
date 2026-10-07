@@ -133,6 +133,33 @@ describe('auto-retrieval relevance', () => {
     expect(await contextFor(kb, 'Remember I am on the Payments team')).not.toContain('Retrieved passages')
   })
 
+  it('rescues a match just under the floor when keyword search ranks the same passage', async () => {
+    const embedder = { id: 'fake', dimensions: 1, relevanceFloor: 0.35, embed: async () => [[0]] } as Embedder
+    const hit = (id: string, chunkId: number, similarity: number): SearchHit => ({
+      chunkId, documentId: id, collection: 'handbook', title: id, source: null, content: `content of ${id}`, ordinal: 0, metadata: {}, score: similarity, similarity,
+    })
+    const kb = (vector: SearchHit[], keyword: SearchHit[]) => {
+      const k = Object.create(Knowledge.prototype) as Knowledge
+      Object.assign(k, {
+        embedder,
+        collections: async () => [{ collection: 'handbook', documents: 3, chunks: 3 }],
+        search: async (_q: string, o: { mode?: string } = {}) => (o.mode === 'keyword' ? keyword : vector),
+      })
+      return k
+    }
+    const sheet = hit('budget-q2', 7, 0.31)
+    // Under the floor (0.35) but within the rescue band (0.285), and keyword search agrees: kept.
+    expect(await contextFor(kb([sheet, hit('atlas', 8, 0.22)], [hit('budget-q1', 6, 0), sheet]), 'How much did the conference tickets cost?')).toContain('budget-q2')
+    // Keyword search prefers other passages: silent.
+    expect(await contextFor(kb([sheet], [hit('atlas', 8, 0), hit('budget-q1', 6, 0)]), 'How much did the conference tickets cost?')).not.toContain('Retrieved passages')
+    // Too far under the floor: silent, whatever keywords say.
+    const weak = hit('budget-q2', 7, 0.27)
+    expect(await contextFor(kb([weak], [weak]), 'How much did the conference tickets cost?')).not.toContain('Retrieved passages')
+    // Off when asked.
+    const off = await knowledgeSkill({ autoRetrieve: { keywordRescue: false } }).context!({ db, knowledge: kb([sheet], [sheet]), embedder, threadId: 't', messages: [{ role: 'user', content: 'conference tickets cost' }] })
+    expect(off ?? '').not.toContain('Retrieved passages')
+  })
+
   it('drops loosely related passages relative to the best match', async () => {
     const kb = fakeKnowledge({ 'toronto wifi password': [['wifi-toronto', 0.85], ['wifi-berlin', 0.63], ['parking', 0.54]] })
     const context = await contextFor(kb, 'toronto wifi password')
