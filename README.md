@@ -679,6 +679,8 @@ const { text, language, segments } = await stt.transcribe(audio, {
 - **Language** is detected once, from the first window with speech, and returned as an ISO 639-1 code.
 - `audioToMono16k` uses Web Audio, so call it on the main thread; `transcribe()` takes the samples anywhere.
 - **Self-hosting** applies too: `selfHost` / `configureTransformers()` cover the transcriber, and `npx enclave-mirror --transcriber whisper-base` mirrors exactly the files it loads.
+- **WebGPU that fails falls back to WASM.** Some GPUs report WebGPU but fail to build its compute pipelines (Adreno 7xx in Chrome on Android: "Failed to create a WebGPU compute pipeline"). When a model whose device was picked automatically fails on WebGPU, at load or during inference, the worker unloads it, switches to WASM (downloading the WASM weights if they differ), runs the step again and reports `{ status: 'fallback', device: 'wasm', error }` through `onProgress`. Remember that per device and pass `device: 'wasm'` next time; `device: 'webgpu'` never falls back. Embedders and rerankers do the same. On some drivers ONNX Runtime keeps using the broken WebGPU device in that worker even for WASM sessions (Adreno 7xx: the retry fails the same way), so if the retry fails too, terminate the worker and start a new one with `device: 'wasm'`: a worker that never initialises WebGPU works.
+- **Each file is requested once.** Transformers.js probes every file's size before downloading it; the worker answers the probe from the download itself. `isCached()` reads only the browser cache.
 - Tests can use `mockTranscriber(segments)` from `enclave-ai/testing`.
 
 ## Answer questions with SQL
@@ -848,6 +850,13 @@ npx enclave-mirror --out public/models --webllm qwen3-4b --embedding embeddingge
 createWebEnclave({ selfHost: { baseUrl: '/models' }, ... })
 ```
 
+If your bundler already emits ONNX Runtime's WASM with your app (Vite, webpack and Rollup do), keep that copy instead of Transformers.js's default, cdn.jsdelivr.net, in every worker that runs a Transformers.js model:
+
+```ts
+import { configureTransformers } from 'enclave-ai/transformers'
+await configureTransformers({ wasmPaths: 'bundled' }, mlWorker)
+```
+
 **3. Let the browser enforce it.** Serve a Content-Security-Policy that only allows your own site. The browser then blocks every other connection, from the page and from its workers:
 
 ```ts
@@ -930,7 +939,7 @@ try { await ai.run(question).text() } catch (e) {
 - A `storage` failure doesn't always mean the disk is full. Browsers sometimes refuse writes while still reporting gigabytes free (Chrome does this after updating itself underneath a running browser, and some profiles get stuck with a cap of a few hundred MB). `checkStorage()` writes a small file to OPFS and to Cache Storage; when writes are refused despite free quota, `refusing` is true and `message` tells the user to restart the browser or use another profile:
 
 ```ts
-import { checkStorage, ModelLoadError } from 'enclave-ai'
+import { checkStorage } from 'enclave-ai/storage-check'   // also exported from 'enclave-ai'; this entry has no dependencies
 if (e instanceof ModelLoadError && e.reason === 'storage') {
   const check = await checkStorage()
   showProblem(check.refusing ? check.message : e.message)

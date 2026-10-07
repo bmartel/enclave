@@ -1,6 +1,6 @@
 {
   "name": "enclave-ai",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "AI agents that run in your user's browser: answers from documents, SQL over local data, and your own tools, with nothing sent to a server.",
   "keywords": [
     "ai",
@@ -45,6 +45,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./storage-check": {
+      "types": "./dist/store/storage-check.d.ts",
+      "default": "./dist/store/storage-check.js"
     },
     "./pglite": {
       "types": "./dist/store/pglite.d.ts",

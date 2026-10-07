@@ -86,4 +86,18 @@ describe('BoundedOpfsFS with PGlite', () => {
     expect(rows[0]?.x).toBe(7)
     await b.close()
   })
+
+  it('learns every file size in one call when it opens, instead of one per file', async () => {
+    const dir = tmp()
+    const a = await open(dir)
+    await a.exec('create table t (x int); insert into t values (1)')
+    await a.close()
+    const io = nodeSyncIo(dir)
+    const b = await PGlite.create({ fs: new BoundedOpfsFS('test', { io }), extensions: { vector } })
+    expect((await b.query<{ x: number }>('select x from t')).rows[0]?.x).toBe(1)
+    await b.close()
+    expect(io.calls.sizes).toBe(1)
+    // Postgres stats hundreds of files at startup; only files it creates or grows need asking again.
+    expect(io.calls.size ?? 0).toBeLessThan(20)
+  })
 })

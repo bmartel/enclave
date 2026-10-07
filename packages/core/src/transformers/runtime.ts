@@ -3,7 +3,7 @@
  * or in-thread. One instance caches every loaded model and serializes inference,
  * so embeddings, reranking and generation can share a single worker and GPU.
  */
-import { toModelLoadError } from '../models/load-error.js'
+import { classifyLoadError, ModelLoadError, toModelLoadError } from '../models/load-error.js'
 import type { Transcript, TranscriptSegment } from '../types.js'
 import { toSegments, transcribeChunked, type AsrOutput } from './transcribe.js'
 
@@ -27,7 +27,7 @@ function dtypeKey(dtype: Dtype): string {
         .join(',')
 }
 
-interface LoadConfig {
+export interface LoadConfig {
   model: string
   dtype?: DtypeSpec
   device?: DevicePreference
@@ -70,13 +70,27 @@ export interface TransformersEnv {
   remoteHost?: string
   remotePathTemplate?: string
   allowRemoteModels?: boolean
-  /** Self-hosted ONNX Runtime WASM (otherwise loaded from cdn.jsdelivr.net). */
-  wasmPaths?: string | { mjs: string; wasm: string }
+  /**
+   * Where ONNX Runtime's WASM comes from. Transformers.js otherwise points it at
+   * cdn.jsdelivr.net. `'bundled'` uses the copy your bundler emitted with
+   * ONNX Runtime (Vite, webpack and Rollup copy `ort-wasm-*.wasm` next to it),
+   * so nothing is fetched from a third party; a URL or `{ mjs, wasm }` names a
+   * self-hosted copy (`{ wasm }` alone keeps the bundled JavaScript glue).
+   */
+  wasmPaths?: string | { mjs?: string; wasm: string } | 'bundled'
 }
 
 export interface LoadProgress {
   model: string
+  /**
+   * Transformers.js's status (`initiate`, `download`, `progress`, `done`,
+   * `ready`…), or `fallback`: WebGPU failed for this model (`error` says how)
+   * and it now runs on WASM (`device`). Apps may remember that and pass
+   * `device: 'wasm'` from then on.
+   */
   status: string
+  device?: 'webgpu' | 'wasm'
+  error?: string
   file?: string
   progress?: number
   loaded?: number
@@ -85,7 +99,7 @@ export interface LoadProgress {
 
 type TJS = typeof import('@huggingface/transformers')
 
-interface Backend {
+export interface Backend {
   device: 'webgpu' | 'wasm' | undefined
   f16: boolean
 }
@@ -95,7 +109,83 @@ function applyEnv(lib: TJS, env: TransformersEnv): void {
   if (env.remotePathTemplate !== undefined) lib.env.remotePathTemplate = env.remotePathTemplate
   if (env.allowRemoteModels !== undefined) lib.env.allowRemoteModels = env.allowRemoteModels
   const wasm = (lib.env.backends.onnx as { wasm?: { wasmPaths?: unknown } }).wasm
-  if (env.wasmPaths !== undefined && wasm) wasm.wasmPaths = env.wasmPaths
+  // Unset, ONNX Runtime loads the WASM its bundler emitted (import.meta.url).
+  if (env.wasmPaths === 'bundled' && wasm) delete wasm.wasmPaths
+  else if (env.wasmPaths !== undefined && wasm) wasm.wasmPaths = env.wasmPaths
+  const fetcher = lib.env.fetch as ((input: string | URL, init?: any) => Promise<any>) & { shared?: boolean }
+  if (typeof fetcher === 'function' && !fetcher.shared) lib.env.fetch = shareSizeProbes(fetcher)
+}
+
+/**
+ * Transformers.js asks for each file's size (a one-byte Range request) before
+ * downloading it, so every file was requested twice. The probe starts the
+ * download instead and is answered from its headers; the download that
+ * follows gets that response.
+ */
+export function shareSizeProbes(base: (input: string | URL, init?: any) => Promise<any>) {
+  const started = new Map<string, Promise<Response>>()
+  /** Probes that found nothing: the request that follows gets the same answer. */
+  const missing = new Map<string, { status: number; statusText: string }>()
+  const shared = async (input: string | URL, init?: any): Promise<any> => {
+    const url = String(input)
+    const headers = new Headers(init?.headers)
+    const range = headers.get('Range')
+    if (range === 'bytes=0-0' && /^https?:/.test(url) && (init?.method ?? 'GET') === 'GET') {
+      headers.delete('Range')
+      let download = started.get(url)
+      if (!download) {
+        const { cache: _cache, ...rest } = init ?? {}
+        download = base(input, { ...rest, headers }) as Promise<Response>
+        started.set(url, download)
+        download.catch(() => started.delete(url))
+      }
+      const response = await download
+      if (!response.ok) {
+        started.delete(url)
+        response.body?.cancel().catch(() => undefined)
+        if (response.status === 404) missing.set(url, { status: response.status, statusText: response.statusText })
+        return new Response(null, { status: response.status, statusText: response.statusText })
+      }
+      const size = response.headers.get('content-length')
+      const type = response.headers.get('content-type')
+      return new Response(null, {
+        status: size ? 206 : 200,
+        headers: { ...(type ? { 'content-type': type } : {}), ...(size ? { 'content-range': `bytes 0-0/${size}` } : {}) },
+      })
+    }
+    const download = !range ? started.get(url) : undefined
+    if (download) {
+      started.delete(url)
+      return download
+    }
+    const gone = !range ? missing.get(url) : undefined
+    if (gone) {
+      missing.delete(url)
+      return new Response(null, gone)
+    }
+    return base(input, init)
+  }
+  return Object.assign(shared, { shared: true })
+}
+
+/**
+ * Whether a failure came from the WebGPU backend (creating a session or a
+ * compute pipeline, a lost device, GPU memory), so the same model may still
+ * run on WASM. Some mobile GPUs (Adreno 7xx in Chrome 154) report an adapter
+ * but fail with "Failed to create a WebGPU compute pipeline: A valid external
+ * Instance reference no longer exists".
+ */
+export function isWebGpuFailure(error: unknown): boolean {
+  if (error instanceof ModelLoadError && (error.reason === 'webgpu' || error.reason === 'gpu-memory')) return true
+  let e: unknown = error
+  for (let depth = 0; e && depth < 4; depth++) {
+    const message = String((e as { message?: unknown })?.message ?? e)
+    if (/webgpu|\bGPU(Device|Adapter|Buffer|Queue)\b|compute pipeline|external Instance|device (was )?lost|\bdawn\b|\bjsep\b/i.test(message)) return true
+    const reason = classifyLoadError(e)
+    if (reason === 'webgpu' || reason === 'gpu-memory') return true
+    e = (e as { cause?: unknown }).cause
+  }
+  return false
 }
 
 /** Files Transformers.js probes for but tolerates missing. */
@@ -115,6 +205,8 @@ export class TransformersRuntime {
   private queue: Promise<unknown> = Promise.resolve()
 
   private env: TransformersEnv = {}
+  /** WebGPU failed in this runtime: models not pinned to a device run on WASM from now on. */
+  private webgpuFailed = false
 
   constructor(private readonly onProgress?: (progress: LoadProgress) => void) {}
 
@@ -131,7 +223,7 @@ export class TransformersRuntime {
     }))
   }
 
-  private detect(): Promise<Backend> {
+  protected detect(): Promise<Backend> {
     return (this.backend ??= (async () => {
       const gpu = (globalThis.navigator as { gpu?: { requestAdapter(): Promise<{ features: Set<string> } | null> } } | undefined)?.gpu
       const inBrowser = typeof window !== 'undefined' || typeof (globalThis as { WorkerGlobalScope?: unknown }).WorkerGlobalScope !== 'undefined'
@@ -146,9 +238,16 @@ export class TransformersRuntime {
     })())
   }
 
-  private async resolve(config: LoadConfig): Promise<{ device?: 'webgpu' | 'wasm'; dtype: Dtype }> {
+  protected async resolve(config: LoadConfig): Promise<{ device?: 'webgpu' | 'wasm'; dtype: Dtype }> {
     const detected = await this.detect()
-    const device = config.device === 'wasm' ? 'wasm' : config.device === 'webgpu' ? 'webgpu' : detected.device
+    const device =
+      config.device === 'wasm'
+        ? 'wasm'
+        : config.device === 'webgpu'
+          ? 'webgpu'
+          : this.webgpuFailed && detected.device === 'webgpu'
+            ? 'wasm'
+            : detected.device
     const spec = config.dtype ?? 'q8'
     const dtype = !perBackend(spec)
       ? spec
@@ -192,6 +291,42 @@ export class TransformersRuntime {
     return run
   }
 
+  /**
+   * Run `task` (a load or an inference) and, when it fails on WebGPU for a
+   * model whose device was chosen automatically, unload that model, switch
+   * this runtime to WASM, report `fallback` and run it once more. Errors on
+   * WASM, or with `device: 'webgpu'` asked for, are thrown as they are.
+   */
+  private async withFallback<T>(config: LoadConfig, task: () => Promise<T>): Promise<T> {
+    const { device } = await this.resolve(config)
+    try {
+      return await task()
+    } catch (error) {
+      if (device !== 'webgpu' || config.device === 'webgpu' || !isWebGpuFailure(error)) throw error
+      this.webgpuFailed = true
+      await this.unload(config.model, device)
+      const cause = (error as { cause?: { message?: string } })?.cause?.message ?? (error as Error)?.message ?? String(error)
+      this.onProgress?.({ model: config.model, status: 'fallback', device: 'wasm', error: String(cause) })
+      return task()
+    }
+  }
+
+  /** Drop loaded models (all of `model`'s, or only those on `device`). */
+  private async unload(model: string, device?: string): Promise<void> {
+    for (const [key, entry] of [...this.loaded]) {
+      if (!key.includes(`:${model}:`) || (device && !key.endsWith(`:${device}`))) continue
+      this.loaded.delete(key)
+      const value = await entry.catch(() => undefined)
+      for (const part of [value?.model, value?.extractor, value?.speech]) {
+        try {
+          await part?.dispose?.()
+        } catch {
+          /* a broken GPU session may fail to release */
+        }
+      }
+    }
+  }
+
   private async embedder(config: EmbedConfig) {
     const tjs = await this.tjs()
     const opts = { ...(await this.resolve(config)), progress_callback: this.progress(config.model) }
@@ -213,12 +348,14 @@ export class TransformersRuntime {
    * WebGPU sessions concurrently in one worker can stall initialization.
    */
   load(kind: LoadKind, config: EmbedConfig | RerankConfig | GenerateConfig | TranscribeConfig): Promise<void> {
-    return this.exclusive(async () => {
-      if (kind === 'embed') await this.embedder(config as EmbedConfig)
-      else if (kind === 'rerank') await this.reranker(config)
-      else if (kind === 'transcribe') await this.speechModel(config)
-      else await this.generator(config)
-    })
+    return this.exclusive(() =>
+      this.withFallback(config, async () => {
+        if (kind === 'embed') await this.embedder(config as EmbedConfig)
+        else if (kind === 'rerank') await this.reranker(config)
+        else if (kind === 'transcribe') await this.speechModel(config)
+        else await this.generator(config)
+      }),
+    )
   }
 
   /**
@@ -228,8 +365,22 @@ export class TransformersRuntime {
    */
   async isCached(config: LoadConfig): Promise<boolean> {
     try {
+      // Nothing is cached without its config.json: say so without asking the
+      // model host (listing the files probes each one over the network).
+      if (!(await this.configCached(config.model))) return false
       const files = await this.cachedFiles(config)
       return files.length > 0 && files.every((f) => f.cached || OPTIONAL_FILES.has(f.file))
+    } catch {
+      return false
+    }
+  }
+
+  /** Whether the model's config.json is in the browser cache (no network). */
+  private async configCached(model: string): Promise<boolean> {
+    const tjs = await this.tjs()
+    try {
+      await tjs.AutoConfig.from_pretrained(model, { local_files_only: true } as never)
+      return true
     } catch {
       return false
     }
@@ -247,19 +398,12 @@ export class TransformersRuntime {
   async clearCache(config: LoadConfig): Promise<void> {
     const tjs = await this.tjs()
     const { device, dtype } = await this.resolve(config)
-    for (const [key, entry] of this.loaded) {
-      if (!key.includes(`:${config.model}:`)) continue
-      this.loaded.delete(key)
-      const value = await entry.catch(() => undefined)
-      await value?.model?.dispose?.()
-      await value?.extractor?.dispose?.()
-      await value?.speech?.dispose?.()
-    }
+    await this.unload(config.model)
     await tjs.ModelRegistry.clear_cache(config.model, { dtype: dtype as never, ...(device ? { device } : {}) })
   }
 
   embed(config: EmbedConfig, texts: string[]): Promise<number[][]> {
-    return this.exclusive(async () => {
+    return this.exclusive(() => this.withFallback(config, async () => {
       const loaded = await this.embedder(config)
       let tensor: any
       if (loaded.kind === 'pipeline') {
@@ -279,7 +423,7 @@ export class TransformersRuntime {
       const native = tensor.dims.at(-1) as number
       if (config.dimensions && config.dimensions < native) tensor = tensor.slice(null, [0, config.dimensions])
       return tensor.normalize(2, -1).tolist() as number[][]
-    })
+    }))
   }
 
   private async reranker(config: RerankConfig) {
@@ -297,7 +441,7 @@ export class TransformersRuntime {
   /** Cross-encoder relevance scores in [0, 1], one per document. */
   rerank(config: RerankConfig, query: string, documents: string[]): Promise<number[]> {
     if (!documents.length) return Promise.resolve([])
-    return this.exclusive(async () => {
+    return this.exclusive(() => this.withFallback(config, async () => {
       const { tokenizer, model } = await this.reranker(config)
       const inputs = await tokenizer(new Array(documents.length).fill(query), {
         text_pair: documents,
@@ -307,7 +451,7 @@ export class TransformersRuntime {
       })
       const { logits } = await model(inputs)
       return (logits.sigmoid().tolist() as number[][]).map((row) => row[0]!)
-    })
+    }))
   }
 
   private async generator(config: GenerateConfig) {
@@ -440,16 +584,18 @@ export class TransformersRuntime {
     return transcribeChunked(
       audio,
       (samples, window) =>
-        this.exclusive(async () => {
-          signal?.throwIfAborted()
-          const speech = await this.speechModel(config)
-          if (!language && speech.multilingual) language = await speech.detectLanguage?.(samples)
-          const output = await speech.recognize(samples, {
-            ...(language ? { language } : {}),
-            ...(request.task ? { task: request.task } : {}),
-          })
-          return toSegments(output, window.offset, window.duration)
-        }),
+        this.exclusive(() =>
+          this.withFallback(config, async () => {
+            signal?.throwIfAborted()
+            const speech = await this.speechModel(config)
+            if (!language && speech.multilingual) language = await speech.detectLanguage?.(samples)
+            const output = await speech.recognize(samples, {
+              ...(language ? { language } : {}),
+              ...(request.task ? { task: request.task } : {}),
+            })
+            return toSegments(output, window.offset, window.duration)
+          }),
+        ),
       {
         ...(request.chunkSeconds !== undefined ? { chunkSeconds: request.chunkSeconds } : {}),
         ...(request.strideSeconds !== undefined ? { strideSeconds: request.strideSeconds } : {}),

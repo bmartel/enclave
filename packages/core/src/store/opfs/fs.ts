@@ -193,8 +193,15 @@ export class BoundedOpfsFS extends BaseFilesystem {
       for (const node of Object.values(dir.children)) node.t === 'f' ? live.add(dataName(node.id)) : walk(node)
     }
     walk(this.#state.root)
-    // Only ever touch names this filesystem creates.
-    for (const name of this.#io.list()) if (/^d\d+$/.test(name) && !live.has(name)) this.#io.remove(name)
+    // Postgres stats every file at startup: learn all sizes in one call
+    // (a thousand round trips, each opening an OPFS handle, took seconds on phones).
+    const sizes = this.#io.sizes?.()
+    for (const name of sizes ? Object.keys(sizes) : this.#io.list()) {
+      // Only ever touch names this filesystem creates.
+      if (!/^d\d+$/.test(name)) continue
+      if (!live.has(name)) this.#io.remove(name)
+      else if (sizes) this.#sizes.set(Number(name.slice(1)), sizes[name]!)
+    }
   }
 
   // --- Tree ----------------------------------------------------------------

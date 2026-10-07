@@ -5,7 +5,7 @@ const MESSAGES: Record<ModelLoadReason, (model: string) => string> = {
   storage: (m) =>
     `There isn't enough browser storage to download ${m}. Free up disk space or clear data for other sites, then try again. ` +
     `If plenty of disk space is free, restart the browser: it can hold on to storage it no longer uses.`,
-  webgpu: (m) => `${m} needs WebGPU, which isn't available in this browser. Use a recent Chrome or Edge, or choose a smaller model that runs on the CPU.`,
+  webgpu: (m) => `${m} needs WebGPU, which isn't available or failed in this browser. Use a recent Chrome or Edge, or choose a smaller model that runs on the CPU.`,
   'gpu-memory': (m) => `${m} doesn't fit in this device's GPU memory. Close other GPU-heavy tabs or choose a smaller model.`,
   network: (m) => `Couldn't download ${m}. Check the connection and try again. Once downloaded it works offline.`,
   unknown: (m) => `${m} failed to load.`,

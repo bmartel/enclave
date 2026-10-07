@@ -90,6 +90,11 @@ export class SharedIoClient implements SyncIo {
     return JSON.parse(decoder.decode(this.#bytes.slice(NAME_BYTES, NAME_BYTES + n))) as string[]
   }
 
+  sizes(): Record<string, number> {
+    const n = this.#call(OP.sizes, '')
+    return JSON.parse(decoder.decode(this.#bytes.slice(NAME_BYTES, NAME_BYTES + n))) as Record<string, number>
+  }
+
   close(): void {
     this.#call(OP.close, '')
   }

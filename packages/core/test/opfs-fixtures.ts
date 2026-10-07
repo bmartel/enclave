@@ -15,7 +15,7 @@ export function fakeOpfs(dir: string, { cap = Infinity } = {}) {
   fs.mkdirSync(dir, { recursive: true })
   const reserved = new Set<object>()
   const locked = new Set<string>()
-  const stats = { opened: 0, closed: 0, maxReserved: 0 }
+  const stats = { opened: 0, closed: 0, maxReserved: 0, sized: 0 }
   const source: HandleSource = {
     async open(name) {
       if (locked.has(name)) throw Object.assign(new Error('another handle is open'), { name: 'NoModificationAllowedError' })
@@ -54,6 +54,10 @@ export function fakeOpfs(dir: string, { cap = Infinity } = {}) {
     async list() {
       return fs.readdirSync(dir)
     },
+    async sizes(names) {
+      stats.sized += names.length
+      return Object.fromEntries(names.map((n) => [n, fs.statSync(path.join(dir, n)).size]))
+    },
   }
   return { source, stats }
 }
@@ -78,6 +82,7 @@ export function nodeSyncIo(dir: string): SyncIo & { calls: Record<string, number
     write: (name, source, position) => (count('write'), withFd(name, (fd) => fs.writeSync(fd, source, 0, source.byteLength, position))),
     truncate: (name, size) => (count('truncate'), withFd(name, (fd) => fs.ftruncateSync(fd, size))),
     size: (name) => (count('size'), fs.existsSync(file(name)) ? fs.statSync(file(name)).size : 0),
+    sizes: () => (count('sizes'), Object.fromEntries(fs.readdirSync(dir).map((n) => [n, fs.statSync(file(n)).size]))),
     flush: () => void count('flush'),
     remove: (name) => (count('remove'), fs.rmSync(file(name), { force: true })),
     list: () => fs.readdirSync(dir),

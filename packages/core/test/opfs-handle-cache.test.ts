@@ -83,4 +83,19 @@ describe('HandleCache', () => {
     expect((await cache.list()).sort()).toEqual(['a', 'c'])
     cache.closeAll()
   })
+
+  it('sizes every file without opening handles, open ones from their handle', async () => {
+    const dir = tmp()
+    const { source, stats } = fakeOpfs(dir)
+    const cache = new HandleCache(source, { maxOpen: 4 })
+    await cache.use('a', (h) => h.write(page(1), { at: 0 }), { writes: true })
+    await cache.use('b', (h) => h.write(new Uint8Array(100), { at: 0 }), { writes: true })
+    cache.closeAll()
+    await cache.use('a', (h) => h.write(page(2), { at: 8192 }), { writes: true })
+    const opened = stats.opened
+    expect(await cache.sizes()).toEqual({ a: 16384, b: 100 })
+    expect(stats.opened).toBe(opened) // nothing opened to learn sizes
+    expect(stats.sized).toBe(1) // only the closed file was asked of the source
+    cache.closeAll()
+  })
 })

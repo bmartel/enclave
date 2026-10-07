@@ -15,6 +15,8 @@ export interface HandleSource {
   open(name: string): Promise<AccessHandle>
   remove(name: string): Promise<void>
   list(): Promise<string[]>
+  /** Sizes of the files in `names` without opening access handles (optional). */
+  sizes?(names: string[]): Promise<Record<string, number>>
 }
 
 interface Entry {
@@ -146,6 +148,24 @@ export class HandleCache {
 
   list(): Promise<string[]> {
     return this.#source.list()
+  }
+
+  /**
+   * Every file's size: from its open handle, else from the source without
+   * opening one (OPFS: File.size), else by opening it like size().
+   */
+  async sizes(): Promise<Record<string, number>> {
+    const names = await this.#source.list()
+    const out: Record<string, number> = {}
+    const closed: string[] = []
+    for (const name of names) {
+      const entry = this.#open.get(name)
+      if (entry) out[name] = entry.handle.getSize()
+      else closed.push(name)
+    }
+    if (this.#source.sizes) Object.assign(out, await this.#source.sizes(closed))
+    else for (const name of closed) out[name] = await this.size(name)
+    return out
   }
 
   closeAll(): void {

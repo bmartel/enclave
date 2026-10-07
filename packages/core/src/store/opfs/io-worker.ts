@@ -45,5 +45,18 @@ export function opfsSource(dir: FileSystemDirectoryHandle): HandleSource {
       for await (const name of (dir as unknown as { keys(): AsyncIterable<string> }).keys()) names.push(name)
       return names
     },
+    // File.size needs no sync access handle (no lock, no quota reservation), and they run together.
+    sizes: async (names) => {
+      const sizes = await Promise.all(
+        names.map(async (name) => {
+          try {
+            return [name, (await (await dir.getFileHandle(name)).getFile()).size] as const
+          } catch {
+            return null // a directory, or gone: the filesystem asks again if it needs it
+          }
+        }),
+      )
+      return Object.fromEntries(sizes.filter((e): e is readonly [string, number] => e !== null))
+    },
   }
 }

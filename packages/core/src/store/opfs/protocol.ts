@@ -32,6 +32,7 @@ export const OP = {
   remove: 6,
   list: 7,
   close: 8,
+  sizes: 9,
 } as const
 export type Op = (typeof OP)[keyof typeof OP]
 
@@ -114,6 +115,12 @@ export interface SyncIo {
   remove(name: string): void
   /** Names of every file in the database directory. */
   list(): string[]
+  /**
+   * Every file's size in one call (name → bytes). Optional: without it the
+   * filesystem asks for each file's size when it first needs it, which at
+   * startup means a round trip, and an OPFS handle opened, per file.
+   */
+  sizes?(): Record<string, number>
   /** Flush and close all handles. */
   close(): void
 }
