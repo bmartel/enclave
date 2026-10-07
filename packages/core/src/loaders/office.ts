@@ -244,9 +244,20 @@ function numberingFormats(numbering: XmlElement | undefined): Map<string, 'order
 // PowerPoint (.pptx)
 // ---------------------------------------------------------------------------
 
-export async function pptxToMarkdown(zip: ZipArchive, options: { notes?: boolean } = {}): Promise<{ title?: string; text: string; slides: number }> {
+/** One slide's text: its 1-based position in the deck and title, for citing it. */
+export interface SlideSection {
+  slide: number
+  title?: string
+  text: string
+}
+
+export async function pptxToMarkdown(
+  zip: ZipArchive,
+  options: { notes?: boolean } = {},
+): Promise<{ title?: string; text: string; slides: number; sections: SlideSection[] }> {
   const slides = await slideOrder(zip)
   const sections: string[] = []
+  const bySlide: SlideSection[] = []
   let deckTitle = await coreTitle(zip)
   for (const [i, path] of slides.entries()) {
     const slide = await xml(zip, path)
@@ -284,9 +295,12 @@ export async function pptxToMarkdown(zip: ZipArchive, options: { notes?: boolean
     }
     const heading = `## Slide ${i + 1}${title ? `: ${title}` : ''}`
     const parts = [heading, body.join('\n'), notes ? `Speaker notes: ${notes}` : ''].filter(Boolean)
-    if (parts.length > 1 || title) sections.push(parts.join('\n\n'))
+    if (parts.length > 1 || title) {
+      sections.push(parts.join('\n\n'))
+      bySlide.push({ slide: i + 1, ...(title ? { title } : {}), text: parts.join('\n\n') })
+    }
   }
-  return { ...(deckTitle ? { title: deckTitle } : {}), text: sections.join('\n\n'), slides: slides.length }
+  return { ...(deckTitle ? { title: deckTitle } : {}), text: sections.join('\n\n'), slides: slides.length, sections: bySlide }
 }
 
 /**
@@ -437,22 +451,36 @@ function dateStyleIndexes(styles: XmlElement | undefined): Set<number> {
 // EPUB
 // ---------------------------------------------------------------------------
 
-export async function epubToMarkdown(zip: ZipArchive): Promise<{ title?: string; text: string }> {
+/**
+ * One EPUB chapter: its 1-based position among the spine's linear items (what
+ * readers page through), its path in the archive and its first heading.
+ */
+export interface ChapterSection {
+  chapter: number
+  href: string
+  title?: string
+  text: string
+}
+
+export async function epubToMarkdown(zip: ZipArchive): Promise<{ title?: string; text: string; chapters: ChapterSection[] }> {
   const container = await xml(zip, 'META-INF/container.xml')
   const opfPath = find(container, 'rootfile')?.attrs['full-path']
   const opf = opfPath ? await xml(zip, opfPath) : undefined
   if (!opfPath || !opf) throw new Error('Not a valid EPUB (no package document).')
   const manifest = new Map<string, string>()
   for (const item of findAll(opf, 'item')) manifest.set(item.attrs.id ?? '', resolvePath(opfPath, item.attrs.href ?? ''))
-  const chapters: string[] = []
+  const chapters: ChapterSection[] = []
+  let position = 0
   for (const ref of findAll(opf, 'itemref')) {
     if (ref.attrs.linear === 'no') continue
     const path = manifest.get(ref.attrs.idref ?? '')
+    position++
     const html = path ? await zip.text(path) : undefined
-    if (!html) continue
+    if (!html || !path) continue
     const { text } = htmlToMarkdown(html)
-    if (text) chapters.push(text)
+    const heading = /^#{1,3} (.+)$/m.exec(text)?.[1]?.trim()
+    if (text) chapters.push({ chapter: position, href: path, ...(heading ? { title: heading } : {}), text })
   }
   const title = textOf(find(opf, 'dc:title')).trim()
-  return { ...(title ? { title } : {}), text: chapters.join('\n\n') }
+  return { ...(title ? { title } : {}), text: chapters.map((c) => c.text).join('\n\n'), chapters }
 }

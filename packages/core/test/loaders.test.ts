@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { PGlite } from '@electric-sql/pglite'
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs'
-import { detectFormat, htmlToMarkdown, importTable, inferType, loadFile, loadFiles, parseCsv, sqlIdentifier, tesseractOcr, UnsupportedFileError } from '../src/loaders/index.js'
+import { anchorFragment, columnLetter, detectFormat, htmlToMarkdown, importTable, inferType, loadFile, loadFiles, parseCsv, sqlIdentifier, tesseractOcr, UnsupportedFileError } from '../src/loaders/index.js'
 import { readZip } from '../src/loaders/zip.js'
 import { Knowledge } from '../src/rag/knowledge.js'
 import { CORE_MIGRATIONS, migrate } from '../src/store/migrate.js'
@@ -539,5 +539,70 @@ describe('tesseractOcr', () => {
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
     const loaded = await loadFile(file('invoice.png', png), { ocr: tesseractOcr({ lib, baseUrl: '/ocr' }) })
     expect(loaded.documents[0]).toMatchObject({ title: 'invoice', content: 'Invoice total: $42.10', metadata: { format: 'image', ocr: true } })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Sections: one citable document per slide, chapter, page or block of rows
+// ---------------------------------------------------------------------------
+
+describe("split: 'section'", () => {
+  it('gives each slide its own document with a slide anchor', async () => {
+    const loaded = await loadFile(file('q3.pptx', pptx()), { split: 'section' })
+    expect(loaded.documents.map((d) => [d.id, d.title, d.metadata])).toEqual([
+      ['q3.pptx#slide=1', 'Q3 Review · Slide 1: Q3 Review', expect.objectContaining({ slide: 1, slides: 2, format: 'pptx' })],
+      ['q3.pptx#slide=2', 'Q3 Review · Slide 2: Results', expect.objectContaining({ slide: 2, slides: 2 })],
+    ])
+    expect(loaded.documents[1]!.content).toContain('Revenue up 12%')
+    expect(loaded.documents[1]!.content).toContain('Speaker notes: Mention the Berlin deal.')
+  })
+
+  it('gives each EPUB chapter its own document, numbered like a reader pages through the spine', async () => {
+    const loaded = await loadFile(file('manual.epub', epub()), { split: 'section' })
+    expect(loaded.documents.map((d) => [d.id, d.title, d.metadata])).toEqual([
+      ['manual.epub#chapter=1', 'Field Manual · Safety', expect.objectContaining({ chapter: 1, href: 'OEBPS/text/two b.xhtml', chapterTitle: 'Safety' })],
+      ['manual.epub#chapter=2', 'Field Manual · Pumps', expect.objectContaining({ chapter: 2, href: 'OEBPS/text/one.xhtml', chapterTitle: 'Pumps' })],
+    ])
+  })
+
+  it('gives each PDF page its own document', async () => {
+    const loaded = await loadFile(file('handbook.pdf', handbookPdf()), { pdf, split: 'section' })
+    expect(loaded.documents.map((d) => [d.id, d.metadata!.page])).toEqual([
+      ['handbook.pdf#page=1', 1],
+      ['handbook.pdf#page=2', 2],
+    ])
+  })
+
+  it('splits sheets into blocks of rows with A1 ranges (the header is row 1)', async () => {
+    const loaded = await loadFile(file('orders.xlsx', xlsx()), { split: 'section', sectionRows: 1 })
+    expect(loaded.documents.map((d) => [d.id, d.metadata])).toEqual([
+      ['orders.xlsx#sheet=Orders&range=A2:E2', expect.objectContaining({ sheet: 'Orders', rows: [1, 1], range: 'A2:E2' })],
+      ['orders.xlsx#sheet=Orders&range=A3:E3', expect.objectContaining({ sheet: 'Orders', rows: [2, 2], range: 'A3:E3' })],
+      ['orders.xlsx#sheet=Notes&range=A2:A2', expect.objectContaining({ sheet: 'Notes', rows: [1, 1], range: 'A2:A2' })],
+    ])
+    expect(loaded.documents[1]!.content).toBe(
+      'Table Orders, rows 2-2 of 2. Columns: Customer, Date, column_3, Total, Paid.\n\nCustomer: Globex; Date: 2025-02-12; Paid: 2025-02-12 18:00',
+    )
+    // Tables for SQL are unchanged.
+    expect(loaded.tables.map((t) => t.rows.length)).toEqual([2, 1])
+  })
+
+  it('splits CSV and JSON arrays the same way, and keeps whole-file documents the default', async () => {
+    const rows = Array.from({ length: 30 }, (_, i) => `m${i + 1},${(i + 1) * 10}`).join('\n')
+    const csv = await loadFile(file('sales.csv', `month,revenue\n${rows}\n`), { split: 'section' })
+    expect(csv.documents.map((d) => d.metadata!.range)).toEqual(['A2:B26', 'A27:B31'])
+    expect(csv.documents[1]!.title).toBe('sales · sales rows 26-30')
+    const json = await loadFile(file('people.json', JSON.stringify([{ name: 'Ada' }, { name: 'Lin' }])), { split: 'section' })
+    expect(json.documents.map((d) => d.id)).toEqual(['people.json#sheet=people&range=A2:A3'])
+    const whole = await loadFile(file('sales.csv', `month,revenue\n${rows}\n`))
+    expect(whole.documents).toHaveLength(1)
+  })
+
+  it('formats anchors as URL fragments and columns as letters', () => {
+    expect(anchorFragment({ sheet: 'Q1 2026', range: 'A2:C9' })).toBe('sheet=Q1%202026&range=A2:C9')
+    expect(anchorFragment({ slide: 3 })).toBe('slide=3')
+    expect(anchorFragment({ chapter: 2, href: 'x.xhtml' })).toBe('chapter=2')
+    expect(anchorFragment({ page: 7 })).toBe('page=7')
+    expect([0, 25, 26, 51, 701, 702].map(columnLetter)).toEqual(['A', 'Z', 'AA', 'AZ', 'ZZ', 'AAA'])
   })
 })

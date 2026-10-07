@@ -41,6 +41,18 @@ export interface LoadOptions {
    * can cite pages, or one document per file (default).
    */
   pdfSplit?: 'file' | 'page'
+  /**
+   * `'section'`: one document per citable part, each with an anchor in its
+   * metadata and id so answers can point at it: PDF pages (`{ page }`,
+   * `#page=N`), slides (`{ slide }`, `#slide=N`), EPUB chapters
+   * (`{ chapter, href }`, `#chapter=N`) and blocks of table rows from
+   * spreadsheets, CSV and JSON arrays (`{ sheet, rows: [first, last], range }`,
+   * `#sheet=Name&range=A2:D26`; rows count data rows from 1, the header is
+   * spreadsheet row 1). Default `'file'`: one document per file (PDFs follow `pdfSplit`).
+   */
+  split?: 'file' | 'section'
+  /** Data rows per document when `split` is `'section'`. Default 25. */
+  sectionRows?: number
   /** Reads text from images and scanned PDF pages. Without it, images are skipped. */
   ocr?: OcrFunction
   /** Include PowerPoint speaker notes. Default true. */
@@ -197,10 +209,20 @@ export async function loadFile(input: FileInput, options: LoadOptions = {}): Pro
       metadata: metadata(extra),
     })
   }
+  const sections = options.split === 'section'
   const addTables = (found: TableData[]) => {
     tables.push(...found)
     if (options.tablesAsText === false) return
     const max = options.maxTextRows ?? 2000
+    if (sections) {
+      for (const t of found) {
+        if (t.rows.length > max) warnings.push(`${t.name}: only the first ${max} of ${t.rows.length} rows are searchable as text. Import it as a table to query all rows.`)
+        for (const block of tableSections(t, { maxRows: max, ...(options.sectionRows ? { blockRows: options.sectionRows } : {}) })) {
+          add(block.text, `${stem(name)} · ${block.label}`, block.anchor, `${source}#${anchorFragment(block.anchor)}`)
+        }
+      }
+      return
+    }
     const text = found.map((t) => tableToText(t, max)).join('\n\n')
     for (const t of found) if (t.rows.length > max) warnings.push(`${t.name}: only the first ${max} of ${t.rows.length} rows are searchable as text. Import it as a table to query all rows.`)
     add(text, stem(name), { tables: found.map((t) => t.name) })
@@ -248,8 +270,10 @@ export async function loadFile(input: FileInput, options: LoadOptions = {}): Pro
       break
     }
     case 'pptx': {
-      const { title, text, slides } = await pptxToMarkdown(readZip(bytes), { notes: options.slideNotes !== false })
-      add(text, title, { slides })
+      const { title, text, slides, sections: bySlide } = await pptxToMarkdown(readZip(bytes), { notes: options.slideNotes !== false })
+      if (sections) {
+        for (const s of bySlide) add(s.text, `${title ?? stem(name)} · Slide ${s.slide}${s.title ? `: ${s.title}` : ''}`, { slide: s.slide, slides }, `${source}#slide=${s.slide}`)
+      } else add(text, title, { slides })
       break
     }
     case 'xlsx': {
@@ -260,8 +284,12 @@ export async function loadFile(input: FileInput, options: LoadOptions = {}): Pro
       break
     }
     case 'epub': {
-      const { title, text } = await epubToMarkdown(readZip(bytes))
-      add(text, title)
+      const { title, text, chapters } = await epubToMarkdown(readZip(bytes))
+      if (sections) {
+        for (const c of chapters) {
+          add(c.text, `${title ?? stem(name)} · ${c.title ?? `Chapter ${c.chapter}`}`, { chapter: c.chapter, href: c.href, ...(c.title ? { chapterTitle: c.title } : {}) }, `${source}#chapter=${c.chapter}`)
+        }
+      } else add(text, title)
       break
     }
     case 'pdf': {
@@ -273,7 +301,7 @@ export async function loadFile(input: FileInput, options: LoadOptions = {}): Pro
             : `${baseName(name)}: ${result.scanned.length} page(s) have no text layer (${result.scanned.slice(0, 5).join(', ')}${result.scanned.length > 5 ? '…' : ''}). Pass an \`ocr\` function to read them.`,
         )
       }
-      if (options.pdfSplit === 'page') {
+      if (options.pdfSplit === 'page' || sections) {
         for (const p of result.pages) add(p.text, `${result.title ?? stem(name)} (page ${p.page})`, { page: p.page }, `${source}#page=${p.page}`)
       } else {
         add(result.pages.map((p) => p.text).join('\n\n'), result.title, { pages: result.pageCount })
@@ -334,4 +362,54 @@ function frontMatter(text: string): { title?: string; body: string } {
   if (!m) return { body: text }
   const title = /^title:\s*["']?(.+?)["']?\s*$/m.exec(m[1]!)?.[1]
   return { ...(title ? { title } : {}), body: text.slice(m[0].length) }
+}
+
+/** Where a section document points inside its file (see `LoadOptions.split`). */
+export type SectionAnchor =
+  | { page: number }
+  | { slide: number }
+  | { chapter: number; href?: string }
+  | { sheet: string; rows: [number, number]; range: string }
+
+/** Spreadsheet column letters for a 0-based index: 0 → A, 26 → AA. */
+export function columnLetter(index: number): string {
+  let n = index + 1
+  let s = ''
+  while (n > 0) {
+    const r = (n - 1) % 26
+    s = String.fromCharCode(65 + r) + s
+    n = Math.floor((n - 1) / 26)
+  }
+  return s
+}
+
+/** The URL fragment for an anchor: `page=3`, `slide=2`, `chapter=4`, `sheet=Orders&range=A2:E26`. */
+export function anchorFragment(anchor: Record<string, unknown>): string {
+  if (typeof anchor.sheet === 'string') return `sheet=${encodeURIComponent(anchor.sheet)}&range=${String(anchor.range)}`
+  for (const key of ['page', 'slide', 'chapter'] as const) if (anchor[key] != null) return `${key}=${String(anchor[key])}`
+  return ''
+}
+
+/**
+ * A table as documents of `blockRows` rows each, every one starting with the
+ * table's header line so it reads (and embeds) on its own.
+ */
+export function tableSections(
+  table: TableData,
+  { maxRows = 2000, blockRows = 25 }: { maxRows?: number; blockRows?: number } = {},
+): { text: string; label: string; anchor: { sheet: string; rows: [number, number]; range: string } }[] {
+  const size = Math.max(1, Math.floor(blockRows))
+  const shown = Math.min(table.rows.length, maxRows)
+  const lastColumn = columnLetter(Math.max(0, table.columns.length - 1))
+  const out: { text: string; label: string; anchor: { sheet: string; rows: [number, number]; range: string } }[] = []
+  for (let start = 0; start < shown; start += size) {
+    const end = Math.min(shown, start + size)
+    const first = start + 1
+    const last = end
+    const body = tableToText({ ...table, rows: table.rows.slice(start, end) }).split('\n').slice(2)
+    const header = `Table ${table.name}, rows ${first}-${last} of ${table.rows.length}. Columns: ${table.columns.join(', ')}.`
+    const range = `A${first + 1}:${lastColumn}${last + 1}`
+    out.push({ text: [header, '', ...body].join('\n'), label: `${table.name} rows ${first}-${last}`, anchor: { sheet: table.name, rows: [first, last], range } })
+  }
+  return out
 }
