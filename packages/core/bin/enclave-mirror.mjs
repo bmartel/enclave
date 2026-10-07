@@ -18,6 +18,7 @@
  *     --ocr eng,deu
  *
  * Presets from the catalog work too: --webllm qwen3-4b --embedding embeddinggemma --reranker mxbai-rerank-xsmall
+ * --transcriber whisper-base (the Whisper files every backend loads: fp32 encoder, q4 + q8 decoders)
  */
 import { createWriteStream } from 'node:fs'
 import { copyFile, mkdir, readdir, stat } from 'node:fs/promises'
@@ -34,6 +35,7 @@ const { values } = parseArgs({
     hf: { type: 'string', multiple: true, default: [] },
     embedding: { type: 'string', multiple: true, default: [] },
     reranker: { type: 'string', multiple: true, default: [] },
+    transcriber: { type: 'string', multiple: true, default: [] },
     ort: { type: 'boolean', default: false },
     ocr: { type: 'string', multiple: true, default: [] },
     'f32': { type: 'boolean', default: false, description: 'Also mirror q4f32 WebLLM builds (GPUs without shader-f16)' },
@@ -41,8 +43,8 @@ const { values } = parseArgs({
   },
 })
 
-if (values.help || (!values.webllm.length && !values.hf.length && !values.embedding.length && !values.reranker.length && !values.ort && !values.ocr.length)) {
-  console.log((await import('node:fs')).readFileSync(new URL(import.meta.url), 'utf8').split('\n').slice(2, 21).join('\n').replace(/^ \* ?/gm, ''))
+if (values.help || (!values.webllm.length && !values.hf.length && !values.embedding.length && !values.reranker.length && !values.transcriber.length && !values.ort && !values.ocr.length)) {
+  console.log((await import('node:fs')).readFileSync(new URL(import.meta.url), 'utf8').split('\n').slice(2, 22).join('\n').replace(/^ \* ?/gm, ''))
   process.exit(values.help ? 0 : 1)
 }
 
@@ -78,17 +80,25 @@ async function repoFiles(repo) {
 // dtype → ONNX file suffix used by Transformers.js
 const SUFFIX = { fp32: '', fp16: '_fp16', q8: '_quantized', int8: '_int8', uint8: '_uint8', q4: '_q4', q4f16: '_q4f16', bnb4: '_bnb4' }
 
-async function mirrorTransformers(repo, dtypes) {
-  console.log(`hf ${repo} [${dtypes.join(', ')}]`)
-  const wanted = dtypes.map((d) => {
-    if (!(d in SUFFIX)) throw new Error(`Unknown dtype ${d}; use one of ${Object.keys(SUFFIX).join(', ')}`)
-    return SUFFIX[d]
-  })
+function suffixOf(dtype) {
+  if (!(dtype in SUFFIX)) throw new Error(`Unknown dtype ${dtype}; use one of ${Object.keys(SUFFIX).join(', ')}`)
+  return SUFFIX[dtype]
+}
+
+/**
+ * `modules` (optional) limits ONNX files to these base names and dtypes, for
+ * presets with a dtype per file (Whisper: { encoder_model: ['fp32'], decoder_model_merged: ['q4', 'q8'] }).
+ */
+async function mirrorTransformers(repo, dtypes, modules) {
+  console.log(`hf ${repo} [${modules ? Object.entries(modules).map(([m, d]) => `${m}: ${d.join(', ')}`).join('; ') : dtypes.join(', ')}]`)
+  const wanted = dtypes.map(suffixOf)
+  const perModule = modules && Object.fromEntries(Object.entries(modules).map(([m, d]) => [m, d.map(suffixOf)]))
   for (const file of await repoFiles(repo)) {
     const onnx = file.name.match(/^onnx\/(.+?)(_fp16|_quantized|_int8|_uint8|_q4f16|_q4|_bnb4)?\.onnx(_data(_\d+)?)?$/)
     if (onnx) {
       // Alternate exports (e.g. model_no_gather_q4) are never loaded by Transformers.js.
-      if (onnx[1].includes('no_gather') || !wanted.includes(onnx[2] ?? '')) continue
+      if (onnx[1].includes('no_gather')) continue
+      if (perModule ? !perModule[onnx[1]]?.includes(onnx[2] ?? '') : !wanted.includes(onnx[2] ?? '')) continue
     } else if (!/\.(json|txt|model|tiktoken|jinja)$/.test(file.name) || file.name.includes('/')) {
       continue
     }
@@ -196,6 +206,18 @@ const presetRepos = [
 for (const spec of [...values.hf, ...presetRepos]) {
   const [repo, dtypes = 'q8'] = spec.split(':')
   await mirrorTransformers(repo, dtypes.split(','))
+}
+for (const id of values.transcriber) {
+  const p = catalog?.findTranscriber?.(id)
+  if (!p) throw new Error(`Unknown transcriber preset ${id} (build the package first)`)
+  // Each backend's dtype is one string or one per ONNX file; mirror every file any backend loads.
+  const modules = {}
+  for (const dtype of Object.values(p.dtype)) {
+    for (const [module, d] of Object.entries(typeof dtype === 'string' ? { encoder_model: dtype, decoder_model_merged: dtype } : dtype)) {
+      modules[module] = [...new Set([...(modules[module] ?? []), d])]
+    }
+  }
+  await mirrorTransformers(p.model, [], modules)
 }
 if (values.webllm.length) await mirrorWebLLM(values.webllm)
 if (values.ort) await mirrorOrt()

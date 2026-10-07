@@ -1,4 +1,5 @@
 import type { PGliteInterface } from '@electric-sql/pglite'
+import type { TranscriberPreset } from './web/catalog.js'
 
 /**
  * Where a component processes data: on this `device` (in the browser or a
@@ -188,6 +189,50 @@ export interface Downloadable {
   isCached(): Promise<boolean>
   /** Delete the cached files. */
   clearCache(): Promise<void>
+}
+
+// ---------------------------------------------------------------------------
+// Speech to text
+// ---------------------------------------------------------------------------
+
+/** A stretch of speech; times in seconds from the start of the audio. */
+export interface TranscriptSegment {
+  start: number
+  end: number
+  text: string
+}
+
+export interface Transcript {
+  text: string
+  /** Spoken language: the ISO 639-1 code when detected, else the `language` option as given. */
+  language?: string
+  segments: TranscriptSegment[]
+}
+
+export interface TranscribeOptions {
+  /** ISO 639-1 code (`en`) or English name (`english`). Omit to detect it from the first speech. */
+  language?: string
+  /** `translate` outputs English text. Default `transcribe`. */
+  task?: 'transcribe' | 'translate'
+  /** Checked between chunks; the promise then rejects with an `AbortError`. */
+  signal?: AbortSignal
+  /** Each segment as soon as its chunk is done, in order. */
+  onSegment?(segment: TranscriptSegment): void
+  /** Share of the audio processed, 0..1, after each chunk. */
+  onProgress?(fraction: number): void
+  /** Window length, seconds. Default 30 (Whisper's maximum). */
+  chunkSeconds?: number
+  /** Overlap between windows, seconds. Default 5. */
+  strideSeconds?: number
+}
+
+/** On-device speech recognition. */
+export interface Transcriber extends Downloadable {
+  readonly id: string
+  readonly locality: 'device'
+  readonly preset: TranscriberPreset
+  /** `audio` is mono 16 kHz PCM in [-1, 1] (see `audioToMono16k`). */
+  transcribe(audio: Float32Array, options?: TranscribeOptions): Promise<Transcript>
 }
 
 /** Cross-encoder that scores (query, document) relevance; higher is better. */

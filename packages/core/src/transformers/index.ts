@@ -1,17 +1,47 @@
 import { fromTextModel } from '../models/text-protocol.js'
-import type { Downloadable, Embedder, EmbedKind, Model, Reranker } from '../types.js'
+import type {
+  Downloadable,
+  Embedder,
+  EmbedKind,
+  Model,
+  Reranker,
+  Transcriber,
+  TranscribeOptions,
+  Transcript,
+} from '../types.js'
 import {
   findEmbedding,
   findLLM,
   findReranker,
+  findTranscriber,
   type EmbeddingPreset,
   type RerankerPreset,
+  type TranscriberPreset,
 } from '../web/catalog.js'
 import { backendFor } from './protocol.js'
 import type { DevicePreference, DtypeSpec, LoadProgress } from './runtime.js'
 
-export type { LoadProgress, DevicePreference, DtypeSpec, TransformersEnv } from './runtime.js'
+export type { LoadProgress, DevicePreference, Dtype, DtypeSpec, TransformersEnv, SpeechModel } from './runtime.js'
 export { TransformersRuntime } from './runtime.js'
+export type { Transcriber, Transcript, TranscriptSegment, TranscribeOptions } from '../types.js'
+export {
+  TRANSCRIBER_PRESETS,
+  findTranscriber,
+  recommendTranscriber,
+  type TranscriberPreset,
+  type ModelDtype,
+} from '../web/catalog.js'
+export {
+  formatTimestamp,
+  mergeSegments,
+  chunkWindows,
+  transcribeChunked,
+  MAX_CHUNK_SECONDS,
+  type ChunkWindow,
+  type TranscriptChunk,
+  SegmentMerger,
+} from './transcribe.js'
+export { audioToMono16k, SAMPLE_RATE } from './audio.js'
 
 interface CommonOptions {
   /** Worker whose entry calls `serveTransformers()`. Omit to run in this thread. */
@@ -202,6 +232,70 @@ export function transformersLLM(options: TransformersLLMOptions): TransformersLL
     isCached: () => backend.isCached(config),
     clearCache: () => backend.clearCache(config),
   }
+}
+
+// ---------------------------------------------------------------------------
+// Speech to text
+// ---------------------------------------------------------------------------
+
+export interface TransformersTranscriberOptions extends CommonOptions {
+  /** A preset id from `TRANSCRIBER_PRESETS` or a full preset object. Default `whisper-tiny`. */
+  preset?: string | TranscriberPreset
+  /** Start downloading immediately instead of on first use. */
+  preload?: boolean
+}
+
+/**
+ * On-device speech recognition with Whisper. Runs on WebGPU, or on WASM where
+ * WebGPU is missing. Long audio is transcribed in overlapping 30 s windows;
+ * segments and progress stream back per window, and `signal` stops between
+ * windows. Weights download on `load()` or the first `transcribe()`.
+ *
+ * ```ts
+ * const stt = transformersTranscriber({ preset: 'whisper-base', worker: mlWorker })
+ * const { text, segments } = await stt.transcribe(await audioToMono16k(file), {
+ *   onSegment: (s) => console.log(formatTimestamp(s.start), s.text),
+ * })
+ * ```
+ */
+export function transformersTranscriber(options: TransformersTranscriberOptions = {}): Transcriber {
+  const preset = resolvePreset(options.preset ?? 'whisper-tiny', findTranscriber, 'transcriber')
+  const backend = backendFor(options.worker)
+  if (options.onProgress) subscribe(backend, preset.model, options.onProgress)
+  const config = {
+    model: preset.model,
+    dtype: options.dtype ?? preset.dtype,
+    ...(options.device ? { device: options.device } : {}),
+  }
+  const transcriber: Transcriber = {
+    id: `transformers:${preset.model}`,
+    locality: 'device',
+    preset,
+    transcribe(audio: Float32Array, opts: TranscribeOptions = {}): Promise<Transcript> {
+      // Posting a view clones its whole buffer; send only the samples.
+      const samples = options.worker && audio.byteLength !== audio.buffer.byteLength ? audio.slice() : audio
+      return backend.transcribe(
+        config,
+        samples,
+        {
+          ...(opts.language ? { language: opts.language } : {}),
+          ...(opts.task ? { task: opts.task } : {}),
+          ...(opts.chunkSeconds !== undefined ? { chunkSeconds: opts.chunkSeconds } : {}),
+          ...(opts.strideSeconds !== undefined ? { strideSeconds: opts.strideSeconds } : {}),
+        },
+        (event) => {
+          if (event.type === 'segment') opts.onSegment?.(event.segment)
+          else opts.onProgress?.(event.fraction)
+        },
+        opts.signal,
+      )
+    },
+    load: () => backend.load('transcribe', config),
+    isCached: () => backend.isCached(config),
+    clearCache: () => backend.clearCache(config),
+  }
+  if (options.preload) void transcriber.load().catch(() => undefined)
+  return transcriber
 }
 
 // ---------------------------------------------------------------------------

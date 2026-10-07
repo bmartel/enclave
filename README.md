@@ -31,6 +31,7 @@ What you get:
 - [Quick start](#quick-start)
 - [Use it with your framework](#use-it-with-your-framework)
 - [Add documents and files](#add-documents-and-files)
+- [Transcribe speech](#transcribe-speech)
 - [Answer questions with SQL](#answer-questions-with-sql)
 - [Give the assistant your app's tools](#give-the-assistant-your-apps-tools)
 - [Choose where the model runs](#choose-where-the-model-runs)
@@ -645,6 +646,41 @@ for await (const e of synthesize({
 }
 ```
 
+## Transcribe speech
+
+Whisper runs in the browser through Transformers.js: on WebGPU where available, otherwise on WASM (CPU). Audio never leaves the device.
+
+```ts
+import { audioToMono16k, formatTimestamp, transformersTranscriber } from 'enclave-ai/transformers'
+
+const stt = transformersTranscriber({
+  preset: 'whisper-base',       // default 'whisper-tiny'
+  worker: mlWorker,             // the same serveTransformers() worker as embeddings; omit to run in this thread
+  onProgress: (p) => showDownload(p),
+})
+
+const audio = await audioToMono16k(file)   // Blob | ArrayBuffer | AudioBuffer → mono 16 kHz Float32Array
+const { text, language, segments } = await stt.transcribe(audio, {
+  // language: 'fr',            // ISO code or English name; omit to detect it
+  // task: 'translate',         // English output
+  signal: controller.signal,
+  onSegment: (s) => append(`[${formatTimestamp(s.start)}] ${s.text}`),
+  onProgress: (fraction) => showProgress(fraction),
+})
+```
+
+| Preset | Model | Download (WebGPU / WASM) |
+|---|---|---|
+| `whisper-tiny` | `onnx-community/whisper-tiny`, 39M, 99 languages | 122 MB / 66 MB |
+| `whisper-base` | `onnx-community/whisper-base`, 74M, 99 languages | 209 MB / 139 MB |
+
+- **Nothing downloads until you ask.** Weights download on `load()` or the first `transcribe()` (or at once with `preload: true`), then come from the browser cache. `isCached()` and `clearCache()` work like the other models, and `ai.modelCache` lists the transcribers.
+- **Long recordings** are transcribed in 30-second windows that overlap by 5 seconds (`chunkSeconds`, `strideSeconds`). Segments and progress arrive as each window finishes, overlaps are kept once, times are from the start of the audio, and `signal` stops between windows. Silent windows are skipped.
+- **Language** is detected once, from the first window with speech, and returned as an ISO 639-1 code.
+- `audioToMono16k` uses Web Audio, so call it on the main thread; `transcribe()` takes the samples anywhere.
+- **Self-hosting** applies too: `selfHost` / `configureTransformers()` cover the transcriber, and `npx enclave-mirror --transcriber whisper-base` mirrors exactly the files it loads.
+- Tests can use `mockTranscriber(segments)` from `enclave-ai/testing`.
+
 ## Answer questions with SQL
 
 Every assistant has a Postgres 17 database, stored in the browser. Your app can use it directly:
@@ -1001,14 +1037,15 @@ Methodology and every report: [`packages/evals`](packages/evals/README.md).
 | Import | Main exports |
 |---|---|
 | `enclave-ai` | `createEnclave`, `defineSkill`, `tool`, `dateContext`, `PrivacyError`, types |
-| `enclave-ai/web` | `createWebEnclave`, `detectDevice`, `rankLLMs`, `recommendLLM`, `BROWSER_LLMS`, `EMBEDDING_PRESETS` |
+| `enclave-ai/web` | `createWebEnclave`, `detectDevice`, `rankLLMs`, `recommendLLM`, `BROWSER_LLMS`, `EMBEDDING_PRESETS`, `TRANSCRIBER_PRESETS` |
 | `enclave-ai/skills` | `knowledgeSkill`, `sqlSkill`, `memorySkill` |
 | `enclave-ai/loaders` | `loadFiles`, `loadFile`, `importTable`, `tesseractOcr`, `ACCEPT`, `htmlToMarkdown`, `parseCsv` |
 | `enclave-ai/models/local` | `ollama`, `lmstudio`, `discoverLocalModels`, `recommendOllamaModel`, `ollamaEmbedder` |
 | `enclave-ai/models/anthropic`, `/models/openai` | `anthropic`, `openaiCompatible` |
 | `enclave-ai/privacy` | `contentSecurityPolicy`, `guardNetwork` |
 | `enclave-ai/eval` | `runEval`, `formatReport`, `evalRetrieval`, matchers (`anyOf`, `numberNear`, `declines`, …) |
-| `enclave-ai/testing` | `mockModel`, `hashEmbedder` for fast tests without downloads |
+| `enclave-ai/transformers` | `transformersEmbedder`, `transformersReranker`, `transformersLLM`, `transformersTranscriber`, `audioToMono16k`, `formatTimestamp`, `configureTransformers` |
+| `enclave-ai/testing` | `mockModel`, `hashEmbedder`, `mockTranscriber` for fast tests without downloads |
 | `enclave-ai/pglite-worker`, `/transformers/worker`, `/models/webllm-worker` | The worker entry points |
 
 `createEnclave` from `enclave-ai` is the lower-level constructor. Bring your own database, model and embedder; it also runs in Node:

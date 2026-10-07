@@ -306,7 +306,78 @@ export function recommendReranker(_device: DeviceProfile, _embedding?: Embedding
   return undefined
 }
 
-export function pickDtype(dtype: { webgpu: string; webgpuF32: string; wasm: string }, device: Pick<DeviceProfile, 'webgpu' | 'shaderF16'>): string {
+export function pickDtype<T extends string | Record<string, string> = string>(
+  dtype: { webgpu: T; webgpuF32: T; wasm: T },
+  device: Pick<DeviceProfile, 'webgpu' | 'shaderF16'>,
+): T {
   if (!device.webgpu) return dtype.wasm
   return device.shaderF16 ? dtype.webgpu : dtype.webgpuF32
+}
+
+// ---------------------------------------------------------------------------
+// Speech to text (Whisper, Transformers.js)
+// ---------------------------------------------------------------------------
+
+/** One dtype for the whole model, or one per ONNX file (`encoder_model`, `decoder_model_merged`). */
+export type ModelDtype = string | Record<string, string>
+
+export interface TranscriberPreset {
+  id: string
+  label: string
+  /** Hugging Face ONNX repo. */
+  model: string
+  params: string
+  /**
+   * Approximate first download in bytes on WebGPU, the larger of the two
+   * builds (weights + config + tokenizer, from the repo's file sizes).
+   */
+  sizeBytes: number
+  /** Approximate first download in bytes on WASM (no WebGPU). */
+  wasmSizeBytes: number
+  /** `sizeBytes` in MB, like the other presets' `downloadMB`. */
+  downloadMB: number
+  languages: 'multilingual' | 'en'
+  /**
+   * Per backend: WebGPU with shader-f16, WebGPU without, WASM. The encoder
+   * stays fp32 (quantized and fp16 Whisper encoders lose accuracy); the
+   * decoder is q4 on WebGPU and q8 on WASM, as in Transformers.js' Whisper demos.
+   */
+  dtype: { webgpu: ModelDtype; webgpuF32: ModelDtype; wasm: ModelDtype }
+}
+
+const WHISPER_GPU = { encoder_model: 'fp32', decoder_model_merged: 'q4' }
+const WHISPER_WASM = { encoder_model: 'fp32', decoder_model_merged: 'q8' }
+
+export const TRANSCRIBER_PRESETS: TranscriberPreset[] = [
+  {
+    id: 'whisper-tiny',
+    label: 'Whisper Tiny (fast, 99 languages)',
+    model: 'onnx-community/whisper-tiny',
+    params: '39M',
+    sizeBytes: 122_388_197,
+    wasmSizeBytes: 66_393_736,
+    downloadMB: 122,
+    languages: 'multilingual',
+    dtype: { webgpu: WHISPER_GPU, webgpuF32: WHISPER_GPU, wasm: WHISPER_WASM },
+  },
+  {
+    id: 'whisper-base',
+    label: 'Whisper Base (more accurate, 99 languages)',
+    model: 'onnx-community/whisper-base',
+    params: '74M',
+    sizeBytes: 208_840_059,
+    wasmSizeBytes: 138_930_955,
+    downloadMB: 209,
+    languages: 'multilingual',
+    dtype: { webgpu: WHISPER_GPU, webgpuF32: WHISPER_GPU, wasm: WHISPER_WASM },
+  },
+]
+
+export function findTranscriber(id: string): TranscriberPreset | undefined {
+  return TRANSCRIBER_PRESETS.find((p) => p.id === id)
+}
+
+/** Whisper Base on desktop GPUs, Whisper Tiny on phones and CPU-only devices. */
+export function recommendTranscriber(device: Pick<DeviceProfile, 'webgpu' | 'mobile'>): TranscriberPreset {
+  return findTranscriber(device.webgpu && !device.mobile ? 'whisper-base' : 'whisper-tiny')!
 }

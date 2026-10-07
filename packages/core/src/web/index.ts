@@ -8,6 +8,7 @@ import {
   transformersEmbedder,
   transformersLLM,
   transformersReranker,
+  transformersTranscriber,
   type LoadProgress,
 } from '../transformers/index.js'
 import type { Db, Downloadable, Embedder, Model, Reranker } from '../types.js'
@@ -15,6 +16,7 @@ import {
   BROWSER_LLMS,
   EMBEDDING_PRESETS,
   RERANKER_PRESETS,
+  TRANSCRIBER_PRESETS,
   findEmbedding,
   findLLM,
   findReranker,
@@ -42,7 +44,7 @@ export interface WebProgress {
 export interface WebWorkers {
   /** Entry calls `servePGlite()` (`enclave-ai/pglite-worker`). */
   db?: Worker
-  /** Entry calls `serveTransformers()` (`enclave-ai/transformers/worker`). Hosts embeddings, reranker and Transformers.js LLMs. */
+  /** Entry calls `serveTransformers()` (`enclave-ai/transformers/worker`). Hosts embeddings, reranker, transcription and Transformers.js LLMs. */
   ml?: Worker
   /** Entry calls `serveWebLLM()` (`enclave-ai/models/webllm-worker`). */
   llm?: Worker
@@ -156,7 +158,7 @@ export interface WebEnclaveOptions extends Omit<EnclaveOptions, 'db' | 'model' |
 }
 
 export interface ModelCacheEntry {
-  kind: 'llm' | 'embedding' | 'reranker'
+  kind: 'llm' | 'embedding' | 'reranker' | 'transcriber'
   /** Catalog preset id. */
   id: string
   label: string
@@ -312,6 +314,7 @@ export async function createWebEnclave(options: WebEnclaveOptions = {}): Promise
   const component = async (kind: ModelCacheEntry['kind'], id: string) => {
     if (kind === 'llm') return (await browserLLM(id, { ...llmOptions, onProgress: undefined })) as Model & Partial<Downloadable>
     const common = workers.ml ? { worker: workers.ml } : {}
+    if (kind === 'transcriber') return transformersTranscriber({ preset: id, ...common })
     return kind === 'embedding' ? transformersEmbedder({ preset: id, ...common }) : transformersReranker({ preset: id, ...common })
   }
   const modelCache: ModelCache = {
@@ -320,6 +323,7 @@ export async function createWebEnclave(options: WebEnclaveOptions = {}): Promise
         ...BROWSER_LLMS.map((p) => ({ kind: 'llm' as const, id: p.id, label: p.label, downloadMB: p.downloadMB })),
         ...EMBEDDING_PRESETS.map((p) => ({ kind: 'embedding' as const, id: p.id, label: p.label, downloadMB: p.downloadMB })),
         ...RERANKER_PRESETS.map((p) => ({ kind: 'reranker' as const, id: p.id, label: p.label, downloadMB: p.downloadMB })),
+        ...TRANSCRIBER_PRESETS.map((p) => ({ kind: 'transcriber' as const, id: p.id, label: p.label, downloadMB: p.downloadMB })),
       ]
       const activeIds = new Set([enclave.model.id, embedder.id, reranker?.id].filter(Boolean))
       return Promise.all(

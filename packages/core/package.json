@@ -119,7 +119,7 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:e2e": "ENCLAVE_E2E=1 vitest run test/models.e2e.test.ts",
+    "test:e2e": "ENCLAVE_E2E=1 vitest run test/models.e2e.test.ts test/transcribe.e2e.test.ts",
     "prepack": "node scripts/prepack.mjs",
     "prepublishOnly": "pnpm run build && pnpm run typecheck && pnpm test"
   },

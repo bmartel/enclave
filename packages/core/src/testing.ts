@@ -1,4 +1,74 @@
-import type { Embedder, Model, ModelChunk, ModelRequest, ToolCall } from './types.js'
+import type {
+  Embedder,
+  Model,
+  ModelChunk,
+  ModelRequest,
+  ToolCall,
+  Transcriber,
+  TranscribeOptions,
+  Transcript,
+  TranscriptSegment,
+} from './types.js'
+import type { TranscriberPreset } from './web/catalog.js'
+
+export interface MockTranscriber extends Transcriber {
+  /** Every call, for assertions: sample count and the options without callbacks/signal. */
+  requests: { samples: number; options: Pick<TranscribeOptions, 'language' | 'task' | 'chunkSeconds' | 'strideSeconds'> }[]
+}
+
+/**
+ * Deterministic transcriber for tests: returns the given segments (or what
+ * `script(audio, options)` returns), streaming each through `onSegment` and
+ * reporting progress by segment end time. Honors `signal`; `load`,
+ * `isCached` and `clearCache` are no-ops (always cached).
+ */
+export function mockTranscriber(
+  script: TranscriptSegment[] | ((audio: Float32Array, options: TranscribeOptions) => Transcript | Promise<Transcript>),
+): MockTranscriber {
+  const preset: TranscriberPreset = {
+    id: 'mock',
+    label: 'Mock transcriber',
+    model: 'mock',
+    params: '0',
+    sizeBytes: 0,
+    wasmSizeBytes: 0,
+    downloadMB: 0,
+    languages: 'multilingual',
+    dtype: { webgpu: 'fp32', webgpuF32: 'fp32', wasm: 'fp32' },
+  }
+  const requests: MockTranscriber['requests'] = []
+  return {
+    id: 'mock-transcriber',
+    locality: 'device',
+    preset,
+    requests,
+    async transcribe(audio, options = {}) {
+      const { signal, onSegment, onProgress, ...rest } = options
+      requests.push({ samples: audio.length, options: rest })
+      signal?.throwIfAborted()
+      const transcript =
+        typeof script === 'function'
+          ? await script(audio, options)
+          : { text: script.map((s) => s.text.trim()).join(' '), segments: script.map((s) => ({ ...s })) }
+      const duration = Math.max(audio.length / 16_000, transcript.segments.at(-1)?.end ?? 0) || 1
+      onProgress?.(0)
+      for (const segment of transcript.segments) {
+        await Promise.resolve()
+        signal?.throwIfAborted()
+        onSegment?.(segment)
+        onProgress?.(Math.min(segment.end / duration, 1))
+      }
+      onProgress?.(1)
+      return {
+        ...transcript,
+        ...(transcript.language ?? options.language ? { language: transcript.language ?? options.language } : {}),
+      }
+    },
+    load: async () => undefined,
+    isCached: async () => true,
+    clearCache: async () => undefined,
+  }
+}
 
 export type ScriptedTurn =
   | string
