@@ -19,7 +19,7 @@
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
     "@electric-sql/pglite-pgvector": "^0.0.9",
-    "@huggingface/transformers": "^4.3.0",
+    "@huggingface/transformers": "^4.3.1",
     "@mlc-ai/web-llm": "^0.2.85",
     "@types/node": "^26.6.3",
     "playwright-core": "^1.63.0",

@@ -18,6 +18,36 @@ function perBackend(spec: DtypeSpec): spec is { webgpu: Dtype; webgpuF32: Dtype;
 }
 
 /** Stable cache-key form of a dtype. */
+/**
+ * Split texts, in order, into groups whose padded size (count × longest)
+ * stays within `budget` tokens. A text alone over budget is a group of one.
+ */
+export function groupByTokens(texts: string[], count: (text: string) => number, budget: number): string[][] {
+  const groups: string[][] = []
+  let group: string[] = []
+  let longest = 0
+  for (const text of texts) {
+    const n = count(text)
+    const next = Math.max(longest, n)
+    if (group.length && next * (group.length + 1) > budget) {
+      groups.push(group)
+      group = []
+      longest = 0
+    }
+    group.push(text)
+    longest = Math.max(longest, n)
+  }
+  if (group.length) groups.push(group)
+  return groups
+}
+
+/** Matryoshka truncation, then L2 normalization, as plain arrays. */
+function finish(tensor: any, dimensions?: number): number[][] {
+  const native = tensor.dims.at(-1) as number
+  if (dimensions && dimensions < native) tensor = tensor.slice(null, [0, dimensions])
+  return tensor.normalize(2, -1).tolist() as number[][]
+}
+
 function dtypeKey(dtype: Dtype): string {
   return typeof dtype === 'string'
     ? dtype
@@ -39,6 +69,10 @@ export interface EmbedConfig extends LoadConfig {
   /** Truncate to this many dimensions (Matryoshka) before normalizing. */
   dimensions?: number
   maxTokens?: number
+  /** Load only the text model of a multimodal repo (its vision and audio configs dropped). */
+  textOnly?: boolean
+  /** On WebGPU, split batches so batch size × padded length stays within this. */
+  webgpuMaxBatchTokens?: number
 }
 
 export type RerankConfig = LoadConfig
@@ -335,12 +369,26 @@ export class TransformersRuntime {
         const extractor = await tjs.pipeline('feature-extraction', config.model, opts as never)
         return { kind: 'pipeline' as const, extractor }
       }
+      const modelConfig = await this.modelConfig(config, opts.progress_callback)
       const [tokenizer, model] = await Promise.all([
         tjs.AutoTokenizer.from_pretrained(config.model, { progress_callback: opts.progress_callback }),
-        tjs.AutoModel.from_pretrained(config.model, opts as never),
+        tjs.AutoModel.from_pretrained(config.model, (modelConfig ? { ...opts, config: modelConfig } : opts) as never),
       ])
-      return { kind: 'sentence' as const, tokenizer, model }
+      return { kind: 'sentence' as const, tokenizer, model, device: opts.device }
     })
+  }
+
+  /**
+   * The config a text-only load uses: the repo's, without its vision and audio
+   * encoders (else they would be loaded and downloaded too). Undefined otherwise.
+   */
+  private async modelConfig(config: LoadConfig, progress_callback?: unknown, local_files_only = false): Promise<Record<string, unknown> | undefined> {
+    if (!(config as EmbedConfig).textOnly) return undefined
+    const tjs = await this.tjs()
+    const loaded = (await tjs.AutoConfig.from_pretrained(config.model, { progress_callback, local_files_only } as never)) as unknown as Record<string, unknown>
+    loaded.vision_config = null
+    loaded.audio_config = null
+    return loaded
   }
 
   /**
@@ -390,7 +438,8 @@ export class TransformersRuntime {
   async cachedFiles(config: LoadConfig): Promise<{ file: string; cached: boolean }[]> {
     const tjs = await this.tjs()
     const { device, dtype } = await this.resolve(config)
-    const result = await tjs.ModelRegistry.is_cached_files(config.model, { dtype: dtype as never, ...(device ? { device } : {}) })
+    const modelConfig = await this.modelConfig(config, undefined, true)
+    const result = await tjs.ModelRegistry.is_cached_files(config.model, { dtype: dtype as never, ...(device ? { device } : {}), ...(modelConfig ? { config: modelConfig as never } : {}) })
     return result.files
   }
 
@@ -399,7 +448,9 @@ export class TransformersRuntime {
     const tjs = await this.tjs()
     const { device, dtype } = await this.resolve(config)
     await this.unload(config.model)
-    await tjs.ModelRegistry.clear_cache(config.model, { dtype: dtype as never, ...(device ? { device } : {}) })
+    // Text-only models: their config (the full one is fine here) may already be gone, so list without it.
+    const modelConfig = await this.modelConfig(config, undefined, true).catch(() => undefined)
+    await tjs.ModelRegistry.clear_cache(config.model, { dtype: dtype as never, ...(device ? { device } : {}), ...(modelConfig ? { config: modelConfig as never } : {}) })
   }
 
   embed(config: EmbedConfig, texts: string[]): Promise<number[][]> {
@@ -412,17 +463,17 @@ export class TransformersRuntime {
           normalize: true,
         } as never)
       } else {
-        const inputs = await loaded.tokenizer(texts, {
-          padding: true,
-          truncation: true,
-          max_length: Math.min(config.maxTokens ?? 2048, 2048),
-        })
-        const output = await loaded.model(inputs)
-        tensor = output.sentence_embedding
+        const budget = loaded.device === 'webgpu' ? config.webgpuMaxBatchTokens : undefined
+        const max_length = Math.min(config.maxTokens ?? 2048, budget ?? 2048)
+        const out: number[][] = []
+        for (const group of budget ? groupByTokens(texts, (t) => Math.min(loaded.tokenizer.encode(t).length, max_length), budget) : [texts]) {
+          const inputs = await loaded.tokenizer(group, { padding: true, truncation: true, max_length })
+          const output = await loaded.model(inputs)
+          out.push(...finish(output.sentence_embedding, config.dimensions))
+        }
+        return out
       }
-      const native = tensor.dims.at(-1) as number
-      if (config.dimensions && config.dimensions < native) tensor = tensor.slice(null, [0, config.dimensions])
-      return tensor.normalize(2, -1).tolist() as number[][]
+      return finish(tensor, config.dimensions)
     }))
   }
 

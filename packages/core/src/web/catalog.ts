@@ -1,3 +1,4 @@
+import type { EmbedTask } from '../types.js'
 import type { DeviceProfile } from './device.js'
 
 // ---------------------------------------------------------------------------
@@ -35,6 +36,7 @@ export const BROWSER_LLMS: BrowserLLMPreset[] = [
   { id: 'hermes-3-3b', label: 'Hermes 3 (Llama 3.2 3B)', runtime: 'webllm', model: 'Hermes-3-Llama-3.2-3B', params: '3B', vramMB: 2264, kvMBPer4k: 470, downloadMB: 1800, contextWindow: 8192, quality: 64, thinking: 'none', notes: 'Trained on the <tool_call> format.' },
   { id: 'qwen3-1.7b', label: 'Qwen3 1.7B', runtime: 'webllm', model: 'Qwen3-1.7B', params: '1.7B', vramMB: 2037, kvMBPer4k: 470, downloadMB: 1100, contextWindow: 16384, quality: 62, thinking: 'hybrid' },
   { id: 'llama-3.2-3b', label: 'Llama 3.2 3B', runtime: 'webllm', model: 'Llama-3.2-3B-Instruct', params: '3B', vramMB: 2264, kvMBPer4k: 470, downloadMB: 1800, contextWindow: 8192, quality: 58, thinking: 'none' },
+  { id: 'qwen3.5-9b', label: 'Qwen3.5 9B (experimental)', runtime: 'webllm', model: 'Qwen3.5-9B', params: '9B', vramMB: 6433, kvMBPer4k: 200, downloadMB: 5100, contextWindow: 16384, quality: 50, thinking: 'hybrid', needsLargeBuffers: true, notes: 'WebLLM build limits history (max_history_size 1); may drop earlier turns. KV estimate.' },
   { id: 'qwen3.5-4b', label: 'Qwen3.5 4B (experimental)', runtime: 'webllm', model: 'Qwen3.5-4B', params: '4B', vramMB: 3868, kvMBPer4k: 160, downloadMB: 2600, contextWindow: 16384, quality: 55, thinking: 'hybrid', needsLargeBuffers: true, notes: 'WebLLM build limits history (max_history_size 1); may drop earlier turns.' },
   { id: 'qwen3.5-2b', label: 'Qwen3.5 2B (experimental)', runtime: 'webllm', model: 'Qwen3.5-2B', params: '2B', vramMB: 2245, kvMBPer4k: 120, downloadMB: 1400, contextWindow: 16384, quality: 45, thinking: 'hybrid', needsLargeBuffers: true, notes: 'WebLLM build limits history (max_history_size 1); may drop earlier turns.' },
   { id: 'qwen3-0.6b', label: 'Qwen3 0.6B', runtime: 'webllm', model: 'Qwen3-0.6B', params: '0.6B', vramMB: 1403, kvMBPer4k: 470, downloadMB: 500, contextWindow: 8192, quality: 40, thinking: 'hybrid' },
@@ -135,9 +137,25 @@ export interface EmbeddingPreset {
    */
   method: 'sentence_embedding' | 'pipeline'
   pooling?: 'mean' | 'cls' | 'last_token'
+  /** Prefix for search queries (`task: 'search'`). */
   queryPrefix?: string
+  /**
+   * Query prefixes for other tasks the model was trained with (EmbeddingGemma's
+   * `task: … | query: ` prompts). A task without one uses `queryPrefix`.
+   */
+  taskPrefixes?: Partial<Record<EmbedTask, string>>
   /** Document template; `{title}` and `{text}` are substituted. */
   documentTemplate?: string
+  /**
+   * A multimodal repo whose text model loads on its own (vision and audio
+   * encoders left out of the config, so they are never downloaded).
+   */
+  textOnly?: boolean
+  /**
+   * Most tokens (batch × padded length) per WebGPU run. Some ONNX Runtime
+   * WebGPU kernels exceed a dispatch limit beyond this; batches are split.
+   */
+  webgpuMaxBatchTokens?: number
   /** Supported Matryoshka output sizes (truncate + renormalize). */
   matryoshka?: number[]
   /** dtype per backend. `webgpuF32` is used when the adapter lacks shader-f16. */
@@ -160,14 +178,54 @@ export interface EmbeddingPreset {
   relevanceFloor: number
 }
 
+/** EmbeddingGemma's query prompts per task (model cards of v1 and v2). */
+const GEMMA_TASKS: Partial<Record<EmbedTask, string>> = {
+  'question-answering': 'task: question answering | query: ',
+  'fact-checking': 'task: fact checking | query: ',
+  'code-retrieval': 'task: code retrieval | query: ',
+  classification: 'task: classification | query: ',
+  clustering: 'task: clustering | query: ',
+  similarity: 'task: sentence similarity | query: ',
+}
+
 export const EMBEDDING_PRESETS: EmbeddingPreset[] = [
   {
+    id: 'embeddinggemma-2',
+    label: 'EmbeddingGemma 2 (best quality, 100+ languages)',
+    model: 'onnx-community/embeddinggemma-2-ONNX',
+    dimensions: 768,
+    method: 'sentence_embedding',
+    queryPrefix: 'task: search result | query: ',
+    taskPrefixes: GEMMA_TASKS,
+    documentTemplate: 'title: {title} | text: {text}',
+    matryoshka: [768, 512, 256, 128],
+    // The text model only (270M): its vision and audio encoders stay on the host.
+    textOnly: true,
+    // q4 on GPUs (fp32 activations; the card warns fp16 activations overflow). ONNX Runtime Web's
+    // WASM backend has no GatherBlockQuantized kernel, so no quantized build runs there: the fp16
+    // export does (0.9998 cosine to fp32 on its card; recall@3 1.000 on Vellum's evals), but at
+    // 542 MB and ~460 ms per chunk, so devices without WebGPU get Granite (recommendEmbedding)
+    // and this is only the fallback after WebGPU fails.
+    dtype: { webgpu: 'q4', webgpuF32: 'q4', wasm: 'fp16' },
+    webgpuMaxBatchTokens: 2048,
+    downloadMB: 207, // model_q4 174 MB + tokenizer 32 MB
+    maxTokens: 8192,
+    languages: 'multilingual',
+    license: 'apache-2.0',
+    // q4 on the 91 queries: recall@3 0.984 vector vs 0.951 hybrid; multilingual 10/10 vs 8/10.
+    // (v1 q4: 0.995, MRR 0.940 vs 0.903 here; on Vellum's evals v2 leads: recall@3 1.000 vs 0.972.)
+    searchMode: 'vector',
+    // Its cosines sit higher than v1's: keeps 89/91 on-topic, silences 5/18 conversational.
+    relevanceFloor: 0.66,
+  },
+  {
     id: 'embeddinggemma',
-    label: 'EmbeddingGemma 300M (best quality, 100+ languages)',
+    label: 'EmbeddingGemma 300M (previous version, 100+ languages)',
     model: 'onnx-community/embeddinggemma-300m-ONNX',
     dimensions: 768,
     method: 'sentence_embedding',
     queryPrefix: 'task: search result | query: ',
+    taskPrefixes: GEMMA_TASKS,
     documentTemplate: 'title: {title} | text: {text}',
     matryoshka: [768, 512, 256, 128],
     // No fp16: EmbeddingGemma activations overflow in fp16.
@@ -246,9 +304,9 @@ export function findEmbedding(id: string): EmbeddingPreset | undefined {
   return EMBEDDING_PRESETS.find((p) => p.id === id)
 }
 
-/** EmbeddingGemma on GPUs, Granite (small and quick on CPU) otherwise. */
+/** EmbeddingGemma 2 on GPUs, Granite (small and quick on CPU) otherwise. */
 export function recommendEmbedding(device: DeviceProfile): EmbeddingPreset {
-  return findEmbedding(device.webgpu && !device.mobile ? 'embeddinggemma' : 'granite-multilingual-r2')!
+  return findEmbedding(device.webgpu && !device.mobile ? 'embeddinggemma-2' : 'granite-multilingual-r2')!
 }
 
 // ---------------------------------------------------------------------------
@@ -296,7 +354,7 @@ export function findReranker(id: string): RerankerPreset | undefined {
 }
 
 /**
- * No reranker by default. On the evals retrieval benchmark, EmbeddingGemma
+ * No reranker by default. On the evals retrieval benchmark, EmbeddingGemma (v1)
  * alone reached recall@3 0.995 / MRR 0.932; mxbai (English-only) lowered it to
  * 0.945 / 0.908 and halved multilingual recall; bge-reranker-v2-m3 raised MRR
  * to 0.973 at ~60x the latency and a 571 MB download. Opt in with

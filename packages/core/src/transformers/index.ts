@@ -3,6 +3,8 @@ import type {
   Downloadable,
   Embedder,
   EmbedKind,
+  EmbedOptions,
+  EmbedTask,
   Model,
   Reranker,
   Transcriber,
@@ -66,7 +68,7 @@ export function configureTransformers(env: import('./runtime.js').TransformersEn
 // ---------------------------------------------------------------------------
 
 export interface TransformersEmbedderOptions extends CommonOptions {
-  /** A preset id from `EMBEDDING_PRESETS` or a full preset object. Default `embeddinggemma`. */
+  /** A preset id from `EMBEDDING_PRESETS` or a full preset object. Default `embeddinggemma-2`. */
   preset?: string | EmbeddingPreset
   /** Output size. Must be one of the preset's Matryoshka sizes when smaller than native. */
   dimensions?: number
@@ -80,7 +82,7 @@ export interface TransformersEmbedderOptions extends CommonOptions {
  * model's published quality.
  */
 export function transformersEmbedder(options: TransformersEmbedderOptions = {}): Embedder {
-  const preset = resolvePreset(options.preset ?? 'embeddinggemma', findEmbedding, 'embedding')
+  const preset = resolvePreset(options.preset ?? 'embeddinggemma-2', findEmbedding, 'embedding')
   const dimensions = options.dimensions ?? preset.dimensions
   if (dimensions > preset.dimensions || (dimensions < preset.dimensions && !preset.matryoshka?.includes(dimensions))) {
     throw new Error(
@@ -96,6 +98,8 @@ export function transformersEmbedder(options: TransformersEmbedderOptions = {}):
     dimensions,
     maxTokens: preset.maxTokens,
     dtype: options.dtype ?? preset.dtype,
+    ...(preset.textOnly ? { textOnly: true } : {}),
+    ...(preset.webgpuMaxBatchTokens ? { webgpuMaxBatchTokens: preset.webgpuMaxBatchTokens } : {}),
     ...(options.device ? { device: options.device } : {}),
   }
 
@@ -104,13 +108,14 @@ export function transformersEmbedder(options: TransformersEmbedderOptions = {}):
     locality: 'device',
     dimensions,
     relevanceFloor: preset.relevanceFloor,
-    embed(texts: string[], kind: EmbedKind) {
-      const prefixed = kind === 'query' && preset.queryPrefix ? texts.map((t) => preset.queryPrefix + t) : texts
-      return backend.embed(config, prefixed)
+    embed(texts: string[], kind: EmbedKind, options?: EmbedOptions) {
+      const prefix = kind === 'query' ? queryPrefix(preset, options?.task) : ''
+      return backend.embed(config, prefix ? texts.map((t) => prefix + t) : texts)
     },
     formatDocument(text: string, title?: string) {
       if (preset.documentTemplate) {
-        return preset.documentTemplate.replace('{title}', title?.trim() || 'none').replace('{text}', text)
+        // Replacer functions: `$&` or `$'` in a page's text are not patterns.
+        return preset.documentTemplate.replace('{title}', () => title?.trim() || 'none').replace('{text}', () => text)
       }
       return title ? `${title}\n\n${text}` : text
     },
@@ -120,6 +125,11 @@ export function transformersEmbedder(options: TransformersEmbedderOptions = {}):
   }
   if (options.preload) void embedder.load!().catch(() => undefined)
   return embedder
+}
+
+/** The prompt a query is embedded with for a task: the task's own, else the search prompt. */
+export function queryPrefix(preset: EmbeddingPreset, task: EmbedTask = 'search'): string {
+  return (task !== 'search' ? preset.taskPrefixes?.[task] : undefined) ?? preset.queryPrefix ?? ''
 }
 
 // ---------------------------------------------------------------------------

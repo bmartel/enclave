@@ -21,7 +21,7 @@ const DOCS = [
 ]
 
 describe.skipIf(!run)('embedding presets (real weights)', () => {
-  for (const preset of ['granite-small-r2', 'granite-multilingual-r2', 'embeddinggemma']) {
+  for (const preset of ['granite-small-r2', 'granite-multilingual-r2', 'embeddinggemma', 'embeddinggemma-2']) {
     it(`${preset} ranks the relevant passage first`, async () => {
       const e = transformersEmbedder({ preset })
       const [q] = await e.embed([QUERY], 'query')

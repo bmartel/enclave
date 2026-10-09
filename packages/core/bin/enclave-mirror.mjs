@@ -190,10 +190,13 @@ async function mirrorOcr(languages) {
 }
 
 const catalog = await import('../dist/web/catalog.js').catch(() => undefined)
+// Text-only presets of multimodal repos (EmbeddingGemma 2): only the text model's ONNX files, never the vision/audio encoders.
+const textOnly = new Map()
 const presetRepos = [
   ...values.embedding.map((id) => {
     const p = catalog?.findEmbedding(id)
     if (!p) throw new Error(`Unknown embedding preset ${id} (build the package first)`)
+    if (p.textOnly) textOnly.set(p.model, [...new Set(Object.values(p.dtype))])
     return `${p.model}:${[...new Set(Object.values(p.dtype))].join(',')}`
   }),
   ...values.reranker.map((id) => {
@@ -205,7 +208,7 @@ const presetRepos = [
 
 for (const spec of [...values.hf, ...presetRepos]) {
   const [repo, dtypes = 'q8'] = spec.split(':')
-  await mirrorTransformers(repo, dtypes.split(','))
+  await mirrorTransformers(repo, dtypes.split(','), textOnly.has(repo) ? { model: textOnly.get(repo) } : undefined)
 }
 for (const id of values.transcriber) {
   const p = catalog?.findTranscriber?.(id)

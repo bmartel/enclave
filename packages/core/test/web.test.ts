@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { estimateGpuBudget, recommendEmbedding, recommendLLM, rankLLMs, resolveLLM, findLLM, type DeviceProfile } from '../src/web/index.js'
+import { estimateGpuBudget, findEmbedding, recommendEmbedding, recommendLLM, rankLLMs, resolveLLM, findLLM, type DeviceProfile } from '../src/web/index.js'
 import { resolveWebLLMId } from '../src/models/webllm.js'
 
 function device(p: Partial<DeviceProfile>): DeviceProfile {
@@ -51,7 +51,7 @@ describe('model selection', () => {
     expect(choice.preset.runtime).toBe('transformers')
     expect(choice.dtype).toBe('q4')
     expect(recommendEmbedding(device({ webgpu: false })).id).toBe('granite-multilingual-r2')
-    expect(recommendEmbedding(device({})).id).toBe('embeddinggemma')
+    expect(recommendEmbedding(device({})).id).toBe('embeddinggemma-2')
   })
 
   it('resolves preset ids to concrete builds', () => {
@@ -103,5 +103,41 @@ describe('tool-call grammar', () => {
     })
     const tag = toolCallStructuralTag([{ name: 'run_code', description: '', inputSchema: schema }]) as any
     expect(JSON.stringify(tag)).not.toMatch(/"minLength":\d/)
+  })
+})
+
+describe('embedding presets', () => {
+  it('embeds queries with the prompt of their task, documents with the template', async () => {
+    const { queryPrefix } = await import('../src/transformers/index.js')
+    for (const id of ['embeddinggemma-2', 'embeddinggemma']) {
+      const p = findEmbedding(id)!
+      expect(queryPrefix(p)).toBe('task: search result | query: ')
+      expect(queryPrefix(p, 'question-answering')).toBe('task: question answering | query: ')
+      expect(queryPrefix(p, 'code-retrieval')).toBe('task: code retrieval | query: ')
+      expect(queryPrefix(p, 'similarity')).toBe('task: sentence similarity | query: ')
+    }
+    // Models without task prompts use their one query prefix for every task.
+    expect(queryPrefix(findEmbedding('granite-small-r2')!, 'clustering')).toBe('')
+    expect(queryPrefix(findEmbedding('qwen3-embedding-0.6b')!, 'clustering')).toMatch(/^Instruct:/)
+  })
+
+  it('loads only the text model of EmbeddingGemma 2: q4 on GPUs, the fp16 export on WASM (no quantized build runs there)', () => {
+    const p = findEmbedding('embeddinggemma-2')!
+    expect(p).toMatchObject({ textOnly: true, license: 'apache-2.0', maxTokens: 8192, matryoshka: [768, 512, 256, 128] })
+    expect(p.dtype).toEqual({ webgpu: 'q4', webgpuF32: 'q4', wasm: 'fp16' })
+    expect(p.webgpuMaxBatchTokens).toBeLessThan(2700)
+  })
+})
+
+describe('token-budgeted batches', () => {
+  it('keeps batch size × longest text within the budget, in order', async () => {
+    const { groupByTokens } = await import('../src/transformers/runtime.js')
+    const len = (t: string) => t.length
+    expect(groupByTokens(['aa', 'bb', 'cc', 'dd'], len, 4)).toEqual([['aa', 'bb'], ['cc', 'dd']])
+    // A long text raises the padded size of its group.
+    expect(groupByTokens(['a', 'b', 'cccc', 'd'], len, 6)).toEqual([['a', 'b'], ['cccc'], ['d']])
+    // Alone over budget: a group of one, never dropped.
+    expect(groupByTokens(['xxxxxxxx', 'y'], len, 4)).toEqual([['xxxxxxxx'], ['y']])
+    expect(groupByTokens([], len, 4)).toEqual([])
   })
 })

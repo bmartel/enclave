@@ -160,13 +160,27 @@ export interface Model {
 
 export type EmbedKind = 'query' | 'document'
 
+/**
+ * What a query embedding is for. Task-prompted models (EmbeddingGemma) embed
+ * the query with a different prompt per task; others ignore it. Documents are
+ * always embedded the same way, so one index serves every query task.
+ * Symmetric tasks (`classification`, `clustering`, `similarity`) embed both
+ * sides as queries.
+ */
+export type EmbedTask = 'search' | 'question-answering' | 'fact-checking' | 'code-retrieval' | 'classification' | 'clustering' | 'similarity'
+
+export interface EmbedOptions {
+  /** Query task (default `search`). Ignored for documents. */
+  task?: EmbedTask
+}
+
 export interface Embedder {
   /** Stable identifier; a change triggers a reindex requirement. */
   readonly id: string
   /** Where document text is processed. Undeclared counts as `remote`. */
   readonly locality?: Locality
   readonly dimensions: number
-  embed(texts: string[], kind: EmbedKind): Promise<number[][]>
+  embed(texts: string[], kind: EmbedKind, options?: EmbedOptions): Promise<number[][]>
   /**
    * Cosine similarity below which a query and a passage are almost certainly
    * unrelated. Calibrated per model (cosine scales differ widely); decides

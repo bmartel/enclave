@@ -843,7 +843,7 @@ createWebEnclave({ privacy: { allow: 'device' } })   // this browser and this co
 **2. Host the model files yourself.** By default, models download from Hugging Face and a CDN. No user data is sent, but those services see the user's IP address. Mirror the files to your own site instead:
 
 ```sh
-npx enclave-mirror --out public/models --webllm qwen3-4b --embedding embeddinggemma --ort --ocr eng
+npx enclave-mirror --out public/models --webllm qwen3-4b --embedding embeddinggemma-2 --ort --ocr eng
 ```
 
 ```ts
