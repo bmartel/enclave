@@ -181,6 +181,8 @@ export function knowledgeSkill(options: KnowledgeSkillOptions = {}) {
     const minRerank = auto?.minRerankScore ?? 0.15
     // A reranker's judgement replaces the cosine thresholds.
     if (found.some((h) => h.rerankScore !== undefined)) return found.filter((h) => (h.rerankScore ?? 0) >= minRerank)
+    // Re-embedding for a new model: keyword hits only, no similarity to judge them by. Keep the best two.
+    if (knowledge.vectorsReady === false) return found.slice(0, 2)
     const top = Math.max(0, ...found.map((h) => h.similarity ?? 0))
     if (top < floor) return []
     const cutoff = floor + (top - floor) * (auto?.relativeCutoff ?? 0.5)

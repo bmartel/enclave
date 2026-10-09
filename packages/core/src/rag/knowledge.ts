@@ -1,4 +1,4 @@
-import type { Db, Embedder, Reranker } from '../types.js'
+import type { Db, Embedder, EmbedTask, Reranker } from '../types.js'
 import { kvGet, kvSet } from '../store/migrate.js'
 import { sha256, toVectorLiteral } from '../util.js'
 import { chunkText, type ChunkOptions } from './chunk.js'
@@ -21,6 +21,30 @@ export interface KnowledgeOptions {
    */
   autoReindex?: boolean
   onReindexProgress?(done: number, total: number): void
+  /**
+   * With `autoReindex`: don't re-embed during `init()`. The new vectors are
+   * written next to the old ones, a batch per `reindexStep()` (the host calls
+   * it while the device is idle); until every chunk has one, search runs in
+   * keyword mode and new documents get only the new vectors. The last step
+   * swaps the columns and rebuilds the vector index. It survives restarts:
+   * the embedder being moved to is kept in `knowledge.embedder.next`.
+   */
+  reindexInBackground?: boolean
+}
+
+/** Which embedder produced the index's vectors. */
+export interface EmbedderRecord {
+  id: string
+  dimensions: number
+}
+
+/** A background re-embedding in progress (see `KnowledgeOptions.reindexInBackground`). */
+export interface ReindexStatus {
+  from: EmbedderRecord
+  to: EmbedderRecord
+  /** Chunks that have a vector from `to`. */
+  done: number
+  total: number
 }
 
 export interface IngestDocument {
@@ -61,6 +85,8 @@ export interface SearchOptions {
   rerank?: boolean
   /** Only search these documents. */
   documentIds?: string[]
+  /** What the query is for: task-prompted embedders (EmbeddingGemma) embed it for that task. Default `search`. */
+  task?: EmbedTask
 }
 
 export interface SearchHit {
@@ -87,6 +113,11 @@ export interface CollectionInfo {
 }
 
 const RRF_K = 60
+const EMBEDDER_KEY = 'knowledge.embedder'
+const NEXT_KEY = 'knowledge.embedder.next'
+const sameEmbedder = (a: EmbedderRecord, b: EmbedderRecord) => a.id === b.id && a.dimensions === b.dimensions
+/** A JSON value as a SQL string literal (for the one multi-statement swap). */
+const sqlJson = (value: unknown) => `'${JSON.stringify(value).replace(/'/g, "''")}'::jsonb`
 const IDENT = /^[a-z_][a-z0-9_]*$/
 
 /**
@@ -97,6 +128,10 @@ const IDENT = /^[a-z_][a-z0-9_]*$/
 export class Knowledge {
   readonly language: string
   private ready: Promise<void> | undefined
+  /** Set while vectors are being rebuilt in the background for a new embedder. */
+  private migrating: { from: EmbedderRecord; to: EmbedderRecord } | null = null
+  /** Chunk writes, re-embedding steps and the final swap run one at a time. */
+  private writes: Promise<unknown> = Promise.resolve()
 
   constructor(
     readonly db: Db,
@@ -143,19 +178,131 @@ export class Knowledge {
       create index if not exists chunks_embedding_idx on enclave.chunks using hnsw (embedding vector_cosine_ops);
       create index if not exists chunks_fts_idx on enclave.chunks using gin (fts);
     `)
-    const stored = await kvGet<{ id: string; dimensions: number }>(this.db, 'knowledge.embedder')
+    const want: EmbedderRecord = { id: this.embedder.id, dimensions: dims }
+    const stored = await kvGet<EmbedderRecord>(this.db, EMBEDDER_KEY)
+    const next = (await kvGet<EmbedderRecord | null>(this.db, NEXT_KEY)) ?? null
     if (!stored) {
-      await kvSet(this.db, 'knowledge.embedder', { id: this.embedder.id, dimensions: dims })
-    } else if (stored.id !== this.embedder.id || stored.dimensions !== dims) {
-      if (this.options.autoReindex) {
-        await this.rebuild(this.options.onReindexProgress ? { onProgress: this.options.onReindexProgress } : {})
-        return
-      }
+      await kvSet(this.db, EMBEDDER_KEY, want)
+    } else if (sameEmbedder(stored, want)) {
+      // Back to the index's own embedder in the middle of a move to another one.
+      if (next) await this.abandonBackground()
+    } else if (this.options.autoReindex && this.options.reindexInBackground) {
+      await this.beginBackground(stored, want, next)
+    } else if (this.options.autoReindex) {
+      await this.rebuild(this.options.onReindexProgress ? { onProgress: this.options.onReindexProgress } : {})
+    } else {
       throw new Error(
         `Knowledge index was built with embedder "${stored.id}" (${stored.dimensions}d) but "${this.embedder.id}" ` +
           `(${dims}d) is configured. Call knowledge.reindex() to rebuild it.`,
       )
     }
+  }
+
+  /** Start (or resume) moving the index to `to`: a second vector column, filled by `reindexStep()`. */
+  private async beginBackground(from: EmbedderRecord, to: EmbedderRecord, next: EmbedderRecord | null): Promise<void> {
+    // A move to a third embedder: its half-made column goes.
+    if (next && !sameEmbedder(next, to)) await this.db.exec('alter table enclave.chunks drop column if exists embedding_next')
+    await this.db.exec(`
+      alter table enclave.chunks alter column embedding drop not null;
+      alter table enclave.chunks add column if not exists embedding_next vector(${to.dimensions});
+    `)
+    await kvSet(this.db, NEXT_KEY, to)
+    this.migrating = { from, to }
+    // Nothing to re-embed (an empty index): done at once.
+    await this.swapWhenDone()
+  }
+
+  /** The configured embedder is the index's own again: drop the half-made column, fill vectors that only it had. */
+  private async abandonBackground(): Promise<void> {
+    for (;;) {
+      if (!(await this.fillBatch('embedding', this.options.batchSize ?? 32))) break
+    }
+    await this.db.exec(`
+      alter table enclave.chunks drop column if exists embedding_next;
+      alter table enclave.chunks alter column embedding set not null;
+    `)
+    await kvSet(this.db, NEXT_KEY, null)
+  }
+
+  /** Embed up to `limit` chunks that have no vector in `column`; returns how many it did. */
+  private async fillBatch(column: 'embedding' | 'embedding_next', limit: number, signal?: AbortSignal): Promise<number> {
+    const { rows } = await this.db.query<{ id: number; content: string; title: string | null }>(
+      `select c.id, c.content, d.title from enclave.chunks c join enclave.documents d on d.id = c.document_id
+       where c.${column} is null order by c.id limit $1`,
+      [limit],
+    )
+    if (!rows.length) return 0
+    signal?.throwIfAborted()
+    const vectors = await this.embedBatched(rows.map((r) => this.format(r.content, r.title)), 'document', signal)
+    await this.db.query(
+      `update enclave.chunks c set ${column} = v.embedding::vector
+       from unnest($1::bigint[], $2::text[]) as v(id, embedding) where c.id = v.id`,
+      [rows.map((r) => r.id), vectors.map(toVectorLiteral)],
+    )
+    return rows.length
+  }
+
+  /** Every chunk has its new vector: swap the columns, rebuild the vector index, record the embedder (one statement batch). */
+  private async swapWhenDone(): Promise<boolean> {
+    if (!this.migrating) return true
+    const { rows } = await this.db.query<{ left: number }>('select count(*)::int as left from enclave.chunks where embedding_next is null')
+    if ((rows[0]?.left ?? 0) > 0) return false
+    const { to } = this.migrating
+    await this.db.exec(`
+      begin;
+      drop index if exists enclave.chunks_embedding_idx;
+      alter table enclave.chunks drop column embedding;
+      alter table enclave.chunks rename column embedding_next to embedding;
+      alter table enclave.chunks alter column embedding set not null;
+      create index chunks_embedding_idx on enclave.chunks using hnsw (embedding vector_cosine_ops);
+      insert into enclave.kv (key, value) values ('${EMBEDDER_KEY}', ${sqlJson(to)})
+        on conflict (key) do update set value = excluded.value;
+      insert into enclave.kv (key, value) values ('${NEXT_KEY}', 'null'::jsonb)
+        on conflict (key) do update set value = excluded.value;
+      commit;
+    `)
+    this.migrating = null
+    return true
+  }
+
+  private serial<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.writes.then(fn, fn)
+    this.writes = run.catch(() => undefined)
+    return run
+  }
+
+  /** The background re-embedding in progress, or null (none, or finished). */
+  async reindexStatus(): Promise<ReindexStatus | null> {
+    await this.init()
+    if (!this.migrating) return null
+    const { rows } = await this.db.query<{ total: number; done: number }>(
+      'select count(*)::int as total, count(embedding_next)::int as done from enclave.chunks',
+    )
+    return { ...this.migrating, done: rows[0]?.done ?? 0, total: rows[0]?.total ?? 0 }
+  }
+
+  /** False while a background re-embedding runs: search is keyword-only until it ends. */
+  get vectorsReady(): boolean {
+    return !this.migrating
+  }
+
+  /**
+   * Re-embed the next `limit` chunks (default `batchSize`) for the new
+   * embedder; the last step swaps the index over. Returns the status after
+   * the step, null once there is nothing (left) to do.
+   */
+  async reindexStep(options: { limit?: number; signal?: AbortSignal } = {}): Promise<ReindexStatus | null> {
+    await this.init()
+    if (!this.migrating) return null
+    const finished = await this.serial(async () => {
+      if (!this.migrating) return true
+      await this.fillBatch('embedding_next', options.limit ?? this.options.batchSize ?? 32, options.signal)
+      return this.swapWhenDone()
+    })
+    if (finished) return null
+    const status = await this.reindexStatus()
+    if (status) this.options.onReindexProgress?.(status.done, status.total)
+    return status
   }
 
   async ingest(input: IngestDocument | IngestDocument[], options: IngestOptions = {}): Promise<IngestResult> {
@@ -181,7 +328,9 @@ export class Knowledge {
       const inputs = pending.flatMap((p) => p.pieces.map((piece) => this.format(piece, p.doc.title)))
       const vectors = await this.embedBatched(inputs, 'document', options.signal)
       let at = 0
-      await this.db.transaction(async (tx) => {
+      // While re-embedding in the background, new chunks get only the new embedder's vectors.
+      await this.serial(() => this.db.transaction(async (tx) => {
+        const column = this.migrating ? 'embedding_next' : 'embedding'
         for (const p of pending) {
           const own = vectors.slice(at, at + p.pieces.length)
           at += p.pieces.length
@@ -197,7 +346,7 @@ export class Knowledge {
           await tx.query('delete from enclave.chunks where document_id = $1', [p.id])
           if (p.pieces.length) {
             await tx.query(
-              `insert into enclave.chunks (document_id, collection, ordinal, content, embedding)
+              `insert into enclave.chunks (document_id, collection, ordinal, content, ${column})
                select $1, $2, (t.ord - 1)::int, t.content, t.embedding::vector
                from unnest($3::text[], $4::text[]) with ordinality as t(content, embedding, ord)`,
               [p.id, p.collection, p.pieces, own.map(toVectorLiteral)],
@@ -206,7 +355,7 @@ export class Knowledge {
           result.documents++
           result.chunks += p.pieces.length
         }
-      })
+      }))
       report(pending.at(-1)!.index + 1)
       pending = []
       pooled = 0
@@ -253,7 +402,8 @@ export class Knowledge {
 
   async search(query: string, options: SearchOptions = {}): Promise<SearchHit[]> {
     await this.init()
-    const mode = options.mode ?? this.options.defaultMode ?? 'hybrid'
+    // Until a background re-embedding ends, query and index vectors come from different models.
+    const mode = this.migrating ? 'keyword' : (options.mode ?? this.options.defaultMode ?? 'hybrid')
     const finalLimit = Math.max(1, Math.min(options.limit ?? 8, 100))
     const reranker = options.rerank === false || mode === 'keyword' ? undefined : this.options.reranker
     const limit = reranker ? Math.min(this.options.rerankCandidates ?? Math.max(finalLimit * 3, 24), 60) : finalLimit
@@ -267,7 +417,9 @@ export class Knowledge {
     const useKeyword = mode !== 'vector' && tsquery !== ''
     if (!useVector && !useKeyword) return []
 
-    const vector = useVector ? toVectorLiteral((await this.embedder.embed([query], 'query'))[0]!) : null
+    const vector = useVector
+      ? toVectorLiteral((await this.embedder.embed([query], 'query', options.task ? { task: options.task } : undefined))[0]!)
+      : null
     const scope =
       `($2::text[] is null or c.collection = any($2::text[])) and ($3::jsonb is null or d.metadata @> $3::jsonb)` +
       ` and ($7::text[] is null or c.document_id = any($7::text[]))`
@@ -374,7 +526,7 @@ export class Knowledge {
    */
   async reindex(options: { signal?: AbortSignal; onProgress?(done: number, total: number): void } = {}): Promise<void> {
     this.ready = undefined
-    await this.rebuild(options)
+    await this.serial(() => this.rebuild(options))
     await this.init()
   }
 
@@ -382,11 +534,12 @@ export class Knowledge {
     const dims = this.embedder.dimensions
     const { rows: present } = await this.db.query<{ ok: boolean }>(`select to_regclass('enclave.chunks') is not null as ok`)
     if (!present[0]?.ok) {
-      await kvSet(this.db, 'knowledge.embedder', { id: this.embedder.id, dimensions: dims })
+      await kvSet(this.db, EMBEDDER_KEY, { id: this.embedder.id, dimensions: dims })
       return
     }
     await this.db.exec(`
       drop index if exists enclave.chunks_embedding_idx;
+      alter table if exists enclave.chunks drop column if exists embedding_next;
       alter table if exists enclave.chunks alter column embedding drop not null;
       alter table if exists enclave.chunks alter column embedding type vector(${dims}) using null;
     `)
@@ -413,7 +566,9 @@ export class Knowledge {
       create index if not exists chunks_embedding_idx on enclave.chunks using hnsw (embedding vector_cosine_ops);
     `)
     // Record the new embedder only once every vector has been rebuilt.
-    await kvSet(this.db, 'knowledge.embedder', { id: this.embedder.id, dimensions: dims })
+    await kvSet(this.db, EMBEDDER_KEY, { id: this.embedder.id, dimensions: dims })
+    await kvSet(this.db, NEXT_KEY, null)
+    this.migrating = null
   }
 
   private async embedBatched(texts: string[], kind: 'document', signal?: AbortSignal): Promise<number[][]> {

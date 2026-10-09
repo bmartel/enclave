@@ -153,3 +153,106 @@ describe('reranking and embedder changes', () => {
     await db3.close()
   })
 })
+
+describe('background re-embedding', () => {
+  const docs = [
+    { id: 'pto', title: 'Vacation', content: 'Employees get 25 vacation days per year.' },
+    { id: 'vpn', title: 'VPN', content: 'Use the zero trust agent to reach internal systems.' },
+    { id: 'exp', title: 'Expenses', content: 'Submit receipts within 30 days of travel.' },
+  ]
+  const tagged = (id: string, dims: number) => {
+    const base = hashEmbedder(dims)
+    const calls: { kind: string; task?: string; n: number }[] = []
+    const embedder = {
+      ...base,
+      id,
+      embed: async (t: string[], kind: 'query' | 'document', o?: { task?: string }) => {
+        calls.push({ kind, ...(o?.task ? { task: o.task } : {}), n: t.length })
+        return base.embed(t, kind)
+      },
+    }
+    return { calls, embedder }
+  }
+  const setup = async () => {
+    const db = await memoryDb()
+    await migrate(db, 'core', CORE_MIGRATIONS)
+    await new Knowledge(db, hashEmbedder(16)).ingest(docs)
+    return db
+  }
+
+  it('keeps keyword search while it re-embeds in idle steps, then swaps to vectors', async () => {
+    const db = await setup()
+    const { embedder, calls } = tagged('next-32', 32)
+    const progress: number[] = []
+    const kb = new Knowledge(db, embedder, { autoReindex: true, reindexInBackground: true, batchSize: 2, onReindexProgress: (d) => progress.push(d) })
+    await kb.init()
+    expect(calls).toEqual([]) // nothing re-embedded during init
+    expect(kb.vectorsReady).toBe(false)
+    expect(await kb.reindexStatus()).toMatchObject({ from: { id: 'hash-16', dimensions: 16 }, to: { id: 'next-32', dimensions: 32 }, done: 0, total: 3 })
+    // Search works (keyword) and never compares a new-model query with old vectors.
+    const hits = await kb.search('vacation days', { mode: 'vector' })
+    expect(hits[0]?.documentId).toBe('pto')
+    expect(hits[0]?.similarity).toBeNull()
+    expect(calls).toEqual([])
+    // A page written meanwhile gets the new embedder's vector only.
+    await kb.ingest({ id: 'park', title: 'Parking', content: 'Visitors park on level two.' })
+    expect(await kb.reindexStatus()).toMatchObject({ done: 1, total: 4 })
+    expect(await kb.reindexStep()).toMatchObject({ done: 3, total: 4 })
+    expect(progress).toEqual([3])
+    expect(await kb.reindexStep()).toBeNull() // the last batch: swapped
+    expect(kb.vectorsReady).toBe(true)
+    expect(await kb.reindexStatus()).toBeNull()
+    const { rows } = await db.query<{ dims: number }>('select vector_dims(embedding) as dims from enclave.chunks limit 1')
+    expect(rows[0]?.dims).toBe(32)
+    const qa = await kb.search('vacation days', { mode: 'vector', task: 'question-answering' })
+    expect(qa[0]?.similarity).not.toBeNull()
+    expect(calls.at(-1)).toEqual({ kind: 'query', task: 'question-answering', n: 1 })
+    // Recorded: a new instance with the same embedder starts ready.
+    const again = new Knowledge(db, tagged('next-32', 32).embedder, { autoReindex: true, reindexInBackground: true })
+    await again.init()
+    expect(again.vectorsReady).toBe(true)
+    await db.close()
+  })
+
+  it('resumes after a restart, and goes back cleanly when the old embedder returns', async () => {
+    const db = await setup()
+    const first = new Knowledge(db, tagged('next-32', 32).embedder, { autoReindex: true, reindexInBackground: true, batchSize: 1 })
+    await first.reindexStep()
+    // Restart: the same move carries on where it was.
+    const resumed = new Knowledge(db, tagged('next-32', 32).embedder, { autoReindex: true, reindexInBackground: true, batchSize: 1 })
+    expect(await resumed.reindexStatus()).toMatchObject({ done: 1, total: 3 })
+    await resumed.ingest({ id: 'park', title: 'Parking', content: 'Visitors park on level two.' })
+    // Back to the old model: the half-made column goes, and the new page gets an old-model vector.
+    const back = new Knowledge(db, hashEmbedder(16), { autoReindex: true, reindexInBackground: true })
+    await back.init()
+    expect(back.vectorsReady).toBe(true)
+    expect((await back.search('parking visitors', { mode: 'vector' }))[0]?.documentId).toBe('park')
+    const { rows } = await db.query<{ n: number }>(
+      "select count(*)::int as n from information_schema.columns where table_name = 'chunks' and column_name = 'embedding_next'",
+    )
+    expect(rows[0]?.n).toBe(0)
+    await db.close()
+  })
+
+  it('moves to a third embedder from the middle of a move', async () => {
+    const db = await setup()
+    await new Knowledge(db, tagged('next-32', 32).embedder, { autoReindex: true, reindexInBackground: true, batchSize: 1 }).reindexStep()
+    const third = new Knowledge(db, hashEmbedder(24), { autoReindex: true, reindexInBackground: true })
+    expect(await third.reindexStatus()).toMatchObject({ to: { dimensions: 24 }, done: 0, total: 3 })
+    while (await third.reindexStep());
+    expect((await third.search('receipts travel', { mode: 'vector' }))[0]?.documentId).toBe('exp')
+    await db.close()
+  })
+
+  it('swaps at once when there is nothing to re-embed', async () => {
+    const db = await memoryDb()
+    await migrate(db, 'core', CORE_MIGRATIONS)
+    await new Knowledge(db, hashEmbedder(16)).init()
+    const kb = new Knowledge(db, hashEmbedder(32), { autoReindex: true, reindexInBackground: true })
+    await kb.init()
+    expect(kb.vectorsReady).toBe(true)
+    await kb.ingest(docs)
+    expect((await kb.search('receipts travel', { mode: 'vector' }))[0]?.documentId).toBe('exp')
+    await db.close()
+  })
+})

@@ -13,6 +13,8 @@ export type {
   SearchOptions,
   SearchHit,
   CollectionInfo,
+  EmbedderRecord,
+  ReindexStatus,
 } from './rag/knowledge.js'
 export { chunkText, type ChunkOptions } from './rag/chunk.js'
 export { synthesize, citedNumbers, type SynthesisEvent, type SynthesisSource, type SynthesizeOptions } from './rag/synthesize.js'
