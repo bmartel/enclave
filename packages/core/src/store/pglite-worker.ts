@@ -14,6 +14,14 @@ export interface ServePGliteOptions {
   opfsIo?: () => Worker
   /** Most OPFS sync access handles open at once for `opfs://`. Default 32. */
   maxOpenHandles?: number
+  /**
+   * Most write-ahead log kept between checkpoints, in MB, for persistent data
+   * directories. Default 64. A browser ends the worker without shutting the
+   * database down, so every start replays the log since the last checkpoint,
+   * and in single-user mode (no checkpointer) Postgres's default only
+   * checkpointed after 1 GB of it: the start after a big import replayed it all.
+   */
+  maxWalSizeMb?: number
 }
 
 /**
@@ -40,7 +48,10 @@ export function servePGlite(extensions: PGliteOptions['extensions'] = {}, option
           throw new Error("dataDir 'opfs://…' needs servePGlite(extensions, { opfsIo: () => new Worker(…) })")
         }
         const storage = opfs !== null ? { fs: await openBoundedOpfs(opfs, { ioWorker: options.opfsIo!, maxOpenHandles: options.maxOpenHandles }) } : { dataDir }
-        return await PGlite.create({ ...rest, ...storage, extensions: { vector, ...extensions } })
+        const persistent = opfs !== null || !!dataDir?.startsWith('idb://')
+        const own = (rest as { startParams?: string[] }).startParams
+        const startParams = own ?? (persistent ? boundedWal(options.maxWalSizeMb ?? 64) : undefined)
+        return await PGlite.create({ ...rest, ...storage, ...(startParams ? { startParams } : {}), extensions: { vector, ...extensions } })
       } catch (err) {
         console.error('[enclave-ai] database failed to start', err)
         self.postMessage({ type: DB_FATAL, message: describe(err) })
@@ -49,6 +60,12 @@ export function servePGlite(extensions: PGliteOptions['extensions'] = {}, option
       }
     },
   })
+}
+
+/** PGlite's start parameters with the write-ahead log capped at `mb` (at least 64; the minimum kept at half). */
+export function boundedWal(mb: number): string[] {
+  const max = Math.max(64, Math.round(mb))
+  return [...PGlite.defaultStartParams, '-c', `max_wal_size=${max}MB`, '-c', `min_wal_size=${Math.max(32, Math.floor(max / 2))}MB`]
 }
 
 function describe(err: unknown): string {

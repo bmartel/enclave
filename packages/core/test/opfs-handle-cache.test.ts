@@ -98,4 +98,15 @@ describe('HandleCache', () => {
     expect(stats.sized).toBe(1) // only the closed file was asked of the source
     cache.closeAll()
   })
+
+  it('tells some files\' sizes in one call: open handles, closed files, missing ones as 0', async () => {
+    const dir = tmp()
+    const { source, stats } = fakeOpfs(dir)
+    const cache = new HandleCache(source)
+    await cache.use('a', (h) => h.write(new Uint8Array(10), { at: 0 }), { writes: true })
+    fs.writeFileSync(path.join(dir, 'b'), new Uint8Array(20))
+    const opened = stats.opened
+    expect(await cache.sizesOf(['a', 'b', 'missing'])).toEqual({ a: 10, b: 20, missing: 0 })
+    expect(stats.opened).toBe(opened)
+  })
 })

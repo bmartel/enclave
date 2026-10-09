@@ -56,7 +56,8 @@ export function fakeOpfs(dir: string, { cap = Infinity } = {}) {
     },
     async sizes(names) {
       stats.sized += names.length
-      return Object.fromEntries(names.map((n) => [n, fs.statSync(path.join(dir, n)).size]))
+      // Like OPFS: a name that isn't a file (missing, a directory) is left out.
+      return Object.fromEntries(names.filter((n) => fs.existsSync(path.join(dir, n))).map((n) => [n, fs.statSync(path.join(dir, n)).size]))
     },
   }
   return { source, stats }
@@ -83,6 +84,7 @@ export function nodeSyncIo(dir: string): SyncIo & { calls: Record<string, number
     truncate: (name, size) => (count('truncate'), withFd(name, (fd) => fs.ftruncateSync(fd, size))),
     size: (name) => (count('size'), fs.existsSync(file(name)) ? fs.statSync(file(name)).size : 0),
     sizes: () => (count('sizes'), Object.fromEntries(fs.readdirSync(dir).map((n) => [n, fs.statSync(file(n)).size]))),
+    sizesOf: (names) => (count('sizesOf'), Object.fromEntries(names.map((n) => [n, fs.existsSync(file(n)) ? fs.statSync(file(n)).size : 0]))),
     flush: () => void count('flush'),
     remove: (name) => (count('remove'), fs.rmSync(file(name), { force: true })),
     list: () => fs.readdirSync(dir),

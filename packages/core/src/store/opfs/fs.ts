@@ -5,6 +5,14 @@ import { ERRNO, FsError, type SyncIo } from './protocol.js'
  * A PGlite filesystem that keeps the directory tree in memory and stores file
  * contents through a {@link SyncIo} (one backing file per Postgres file).
  *
+ * File sizes: Postgres stats every file as it starts, and learning ~600
+ * sizes from OPFS took ~80 ms of every start (a file at a time). So each
+ * snapshot also records every file's size, and the journal notes a file the
+ * first time its size changes after a snapshot (before the change); at load
+ * only the noted files, and files created since, are asked for. A snapshot
+ * without sizes, or whose sizes an older version carried into a later
+ * generation, falls back to listing every file once.
+ *
  * Metadata durability: two snapshot files, `meta-0` and `meta-1`. Each holds a
  * JSON snapshot on its first line followed by journal lines, one per mutation.
  * A checkpoint writes a fresh snapshot (generation + 1) into the *other* file,
@@ -17,6 +25,16 @@ const S_IFDIR = 0o040000
 const S_IFREG = 0o100000
 const BLOCK_SIZE = 4096
 const CHECKPOINT_EVERY = 2000
+/**
+ * Read-ahead: a read the cache can't serve fetches at least READ_AHEAD_MIN
+ * bytes, doubling up to READ_AHEAD_MAX while a file is read in order, and the
+ * last READ_AHEAD_FILES files' chunks are kept. Every read is a round trip to
+ * the I/O worker (Postgres asks 8 KB at a time: catalogs as it starts, the
+ * WAL in recovery); reading ahead makes most of them memory copies.
+ */
+const READ_AHEAD_MIN = 64 * 1024
+const READ_AHEAD_MAX = 256 * 1024
+const READ_AHEAD_FILES = 32
 const META = ['meta-0', 'meta-1'] as const
 const meta = (index: number) => (index % 2 ? META[1] : META[0])
 const dataName = (id: number) => `d${id}`
@@ -40,6 +58,14 @@ interface Snapshot {
   gen: number
   nextId: number
   root: DirNode
+  /** File id → size in bytes when the snapshot was taken (absent in older snapshots). */
+  sizes?: Record<string, number>
+  /**
+   * The generation `sizes` were written at. An older version copies a
+   * snapshot's fields into its next one without keeping sizes current or
+   * journaling resizes: sizes from another generation aren't trusted.
+   */
+  sizesGen?: number
 }
 
 type JournalOp =
@@ -50,6 +76,8 @@ type JournalOp =
   | ['rmdir', string]
   | ['chmod', string, number]
   | ['utimes', string, number]
+  /** File id whose size changes after the snapshot: ask for it at load. */
+  | ['size', number]
 
 export interface FsStats {
   dev: number
@@ -82,6 +110,10 @@ export class BoundedOpfsFS extends BaseFilesystem {
   readonly #fds = new Map<number, FileNode>()
   #nextFd = 1
   readonly #encoder = new TextEncoder()
+  /** Files whose size changed since the last snapshot (journaled once each). */
+  readonly #resized = new Set<number>()
+  /** Read-ahead chunk per file id, oldest first. */
+  readonly #ahead = new Map<number, { start: number; bytes: Uint8Array; window: number }>()
 
   constructor(dataDir: string, { io, debug = false }: { io: SyncIo; debug?: boolean }) {
     super(dataDir, { debug })
@@ -93,7 +125,6 @@ export class BoundedOpfsFS extends BaseFilesystem {
     options: Parameters<BaseFilesystem['init']>[1],
   ): ReturnType<BaseFilesystem['init']> {
     this.#load()
-    this.#sweepOrphans()
     return super.init(pg, options)
   }
 
@@ -137,8 +168,12 @@ export class BoundedOpfsFS extends BaseFilesystem {
       return
     }
     const { index, snapshot, lines } = best as { index: number; snapshot: Snapshot; lines: string[] }
-    this.#state = snapshot
+    const { sizes: written, sizesGen, ...state } = snapshot
+    const sizes = written && sizesGen === snapshot.gen ? written : undefined
+    this.#state = state
     this.#active = index
+    // Files whose size the snapshot may not know: resized or created since.
+    const unknown = new Set<number>()
     let replayed = 0
     for (const line of lines) {
       if (!line) continue
@@ -149,7 +184,12 @@ export class BoundedOpfsFS extends BaseFilesystem {
         break // torn tail: everything before it is applied
       }
       try {
+        if (op[0] === 'size') unknown.add(op[1])
+        else if (op[0] === 'create') unknown.add(op[2])
+        // A file unlinked or replaced: drop its contents (again: the session may have ended before it did).
+        const gone = this.#replaced(op)
         this.#apply(op)
+        if (gone) this.#io.remove(dataName(gone.id))
       } catch (err) {
         console.warn('[enclave-ai] skipped journal entry', op, err)
       }
@@ -157,14 +197,59 @@ export class BoundedOpfsFS extends BaseFilesystem {
     }
     this.#journalLines = replayed
     this.#journalEnd = this.#io.size(meta(index))
-    // Start each session from a compact snapshot.
-    if (replayed) this.#checkpoint()
+    if (sizes) {
+      const live: FileNode[] = []
+      this.#walkFiles((node) => live.push(node))
+      for (const node of live) {
+        const size = sizes[node.id]
+        if (size === undefined || unknown.has(node.id)) unknown.add(node.id)
+        else this.#sizes.set(node.id, size)
+      }
+      const ask = live.filter((node) => unknown.has(node.id)).map((node) => dataName(node.id))
+      if (ask.length) {
+        const found = this.#io.sizesOf ? this.#io.sizesOf(ask) : Object.fromEntries(ask.map((name) => [name, this.#io.size(name)]))
+        for (const name of ask) this.#sizes.set(Number(name.slice(1)), found[name] ?? 0)
+      }
+    } else {
+      this.#sweepOrphans()
+    }
+    // Start each session from a compact snapshot, with every size.
+    if (replayed || !sizes) this.#checkpoint()
+  }
+
+  /** The file an operation would unlink or replace, if any. */
+  #replaced(op: JournalOp): FileNode | null {
+    try {
+      if (op[0] === 'unlink') {
+        const node = this.#lookup(op[1])
+        return node.t === 'f' ? (node as FileNode) : null
+      }
+      if (op[0] === 'rename') {
+        const { dir, name } = this.#parent(op[2])
+        const existing = dir.children[name]
+        const moving = this.#lookup(op[1])
+        return existing && existing !== moving && existing.t === 'f' ? (existing as FileNode) : null
+      }
+    } catch {
+      // Applying it will fail the same way.
+    }
+    return null
+  }
+
+  #walkFiles(fn: (node: FileNode) => void, dir: DirNode = this.#state.root): void {
+    for (const node of Object.values(dir.children)) node.t === 'f' ? fn(node) : this.#walkFiles(fn, node)
   }
 
   #checkpoint(): void {
     this.#state.gen++
     const target = this.#state.gen % 2
-    const bytes = this.#encoder.encode(JSON.stringify(this.#state))
+    const sizes: Record<string, number> = {}
+    this.#walkFiles((node) => {
+      const size = this.#sizes.get(node.id)
+      if (size !== undefined) sizes[node.id] = size
+    })
+    this.#resized.clear()
+    const bytes = this.#encoder.encode(JSON.stringify({ ...this.#state, sizes, sizesGen: this.#state.gen }))
     this.#io.truncate(meta(target), 0)
     this.#io.write(meta(target), bytes, 0)
     this.#io.flush()
@@ -286,7 +371,17 @@ export class BoundedOpfsFS extends BaseFilesystem {
       case 'utimes':
         this.#lookup(op[1]).mtime = op[2]
         return
+      case 'size':
+        return
     }
+  }
+
+  /** Before a file's size changes: the journal notes it (once per snapshot), and its read-ahead is stale. */
+  #resizing(id: number): void {
+    this.#ahead.delete(id)
+    if (this.#resized.has(id)) return
+    this.#journal(['size', id])
+    this.#resized.add(id)
   }
 
   #size(node: FileNode): number {
@@ -377,8 +472,25 @@ export class BoundedOpfsFS extends BaseFilesystem {
     const node = this.#fd(fd)
     const size = this.#size(node)
     if (position >= size || length === 0) return 0
-    const target = new Uint8Array(buffer.buffer, buffer.byteOffset + offset, Math.min(length, size - position))
-    return this.#io.read(dataName(node.id), target, position)
+    const want = Math.min(length, size - position)
+    const target = new Uint8Array(buffer.buffer, buffer.byteOffset + offset, want)
+    const chunk = this.#ahead.get(node.id)
+    if (chunk && position >= chunk.start && position + want <= chunk.start + chunk.bytes.byteLength) {
+      target.set(chunk.bytes.subarray(position - chunk.start, position - chunk.start + want))
+      return want
+    }
+    if (want >= READ_AHEAD_MAX) return this.#io.read(dataName(node.id), target, position)
+    // Reading on from the last chunk: a bigger window.
+    const inOrder = chunk && position === chunk.start + chunk.bytes.byteLength
+    const window = inOrder ? Math.min(READ_AHEAD_MAX, chunk.window * 2) : READ_AHEAD_MIN
+    const bytes = new Uint8Array(Math.min(Math.max(window, want), size - position))
+    const got = this.#io.read(dataName(node.id), bytes, position)
+    this.#ahead.delete(node.id)
+    this.#ahead.set(node.id, { start: position, bytes: bytes.subarray(0, got), window })
+    if (this.#ahead.size > READ_AHEAD_FILES) this.#ahead.delete(this.#ahead.keys().next().value as number)
+    const n = Math.min(want, got)
+    target.set(bytes.subarray(0, n))
+    return n
   }
 
   rename(oldPath: string, newPath: string): void {
@@ -395,6 +507,7 @@ export class BoundedOpfsFS extends BaseFilesystem {
 
   truncate(path: string, len = 0): void {
     const node = this.#file(this.#lookup(path))
+    this.#resizing(node.id)
     this.#io.truncate(dataName(node.id), len)
     this.#sizes.set(node.id, len)
   }
@@ -407,6 +520,7 @@ export class BoundedOpfsFS extends BaseFilesystem {
 
   /** Drop a file's contents once no path refers to it. Open fds keep reading zeros. */
   #discard(node: FileNode): void {
+    this.#ahead.delete(node.id)
     this.#io.remove(dataName(node.id))
     this.#sizes.delete(node.id)
   }
@@ -419,6 +533,7 @@ export class BoundedOpfsFS extends BaseFilesystem {
     let node: FileNode
     try {
       node = this.#file(this.#lookup(path))
+      this.#resizing(node.id)
       this.#io.truncate(dataName(node.id), 0)
     } catch (err) {
       if ((err as FsError).code !== ERRNO.ENOENT) throw err
@@ -437,8 +552,11 @@ export class BoundedOpfsFS extends BaseFilesystem {
       buffer instanceof Uint8Array
         ? new Uint8Array(buffer.buffer, buffer.byteOffset + offset, length)
         : new Uint8Array(buffer, offset, length)
+    const before = this.#size(node)
+    if (position + length > before) this.#resizing(node.id)
+    else this.#ahead.delete(node.id)
     const written = this.#io.write(dataName(node.id), source, position)
-    this.#sizes.set(node.id, Math.max(this.#size(node), position + written))
+    this.#sizes.set(node.id, Math.max(before, position + written))
     return written
   }
 }

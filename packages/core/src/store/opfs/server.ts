@@ -65,6 +65,13 @@ export function serveSharedIo(control: SharedArrayBuffer, data: SharedArrayBuffe
         bytes.set(json, NAME_BYTES)
         return json.byteLength
       }
+      case OP.sizesOf: {
+        const names = JSON.parse(decoder.decode(bytes.slice(NAME_BYTES, NAME_BYTES + Math.min(length, payload)))) as string[]
+        const json = encoder.encode(JSON.stringify(await cache.sizesOf(names)))
+        if (json.byteLength > payload) throw new FsError(28, 'size listing exceeds the transfer buffer')
+        bytes.set(json, NAME_BYTES)
+        return json.byteLength
+      }
       case OP.close:
         cache.closeAll()
         return 0
