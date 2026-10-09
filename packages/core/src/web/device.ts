@@ -29,6 +29,7 @@ export async function detectDevice(options: { gpuBudgetMB?: number } = {}): Prom
     gpu?: { requestAdapter(o?: unknown): Promise<GPUAdapterLike | null> }
     deviceMemory?: number
     userAgent?: string
+    maxTouchPoints?: number
     userAgentData?: { mobile?: boolean }
     storage?: { estimate?(): Promise<{ quota?: number; usage?: number }>; persisted?(): Promise<boolean> }
   }
@@ -40,7 +41,9 @@ export async function detectDevice(options: { gpuBudgetMB?: number } = {}): Prom
     adapter = null
   }
 
-  const mobile = nav.userAgentData?.mobile ?? /Android|iPhone|iPad|Mobile/i.test(nav.userAgent ?? '')
+  // iPadOS Safari asks for desktop sites: its user agent says "Macintosh", but a Mac has no touch screen.
+  const ua = nav.userAgent ?? ''
+  const mobile = nav.userAgentData?.mobile ?? (/Android|iPhone|iPad|Mobile/i.test(ua) || (/Macintosh/.test(ua) && (nav.maxTouchPoints ?? 0) > 1))
   const maxStorageBufferMB = adapter ? Math.round(adapter.limits.maxStorageBufferBindingSize / 2 ** 20) : 0
   const deviceMemoryGB = nav.deviceMemory
 

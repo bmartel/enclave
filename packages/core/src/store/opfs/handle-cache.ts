@@ -168,6 +168,24 @@ export class HandleCache {
     return out
   }
 
+  /** The sizes of these files (0 for a missing one), without opening handles where the source can tell. */
+  async sizesOf(names: string[]): Promise<Record<string, number>> {
+    const out: Record<string, number> = {}
+    const closed: string[] = []
+    for (const name of names) {
+      const entry = this.#open.get(name)
+      if (entry) out[name] = entry.handle.getSize()
+      else closed.push(name)
+    }
+    if (this.#source.sizes) {
+      const known = await this.#source.sizes(closed)
+      for (const name of closed) out[name] = known[name] ?? 0
+    } else {
+      for (const name of closed) out[name] = await this.size(name)
+    }
+    return out
+  }
+
   closeAll(): void {
     for (const [name, entry] of [...this.#open]) this.#closeEntry(name, entry)
   }

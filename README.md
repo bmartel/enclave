@@ -990,6 +990,7 @@ Why a second worker: Chromium reserves storage capacity for every open sync acce
 
 - **Requirements.** `SharedArrayBuffer`, so serve the app with `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` (or `credentialless`).
 - **Durability.** Data is flushed after every transaction. Directory changes are journaled, and a crash or closed tab replays the journal on the next start.
+- **Starting fast.** A browser never shuts the database down, so each start replays Postgres's write-ahead log since the last checkpoint: `servePGlite` caps it at 64 MB (`maxWalSizeMb`), and a `CHECKPOINT` when your app is idle (or its page is hidden) keeps the next start's replay short. File sizes are kept with the directory snapshot, so a start doesn't ask OPFS for every file's size, and reads ahead turn Postgres's 8 KB reads into a few round trips.
 - **Several tabs.** One tab's worker owns the database and the others send their queries to it. If that tab closes, another takes over.
 - **Startup failures.** If the database can't start, the worker reports why and exits, so it never holds the database lock. `createWorkerDb` rejects with the reason, or after `openTimeoutMs` (default 30 s) if a frozen tab elsewhere still holds it. It never waits forever.
 - **Vite.** Add `enclave-ai` to `optimizeDeps.exclude`, next to `@electric-sql/pglite`. Pre-bundling enclave-ai inlines a second copy of PGlite, and extensions then fail to load.

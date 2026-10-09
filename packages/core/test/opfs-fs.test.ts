@@ -5,6 +5,7 @@ import { PGlite } from '@electric-sql/pglite'
 import { vector } from '@electric-sql/pglite-pgvector'
 import { afterEach, describe, expect, it } from 'vitest'
 import { BoundedOpfsFS } from '../src/store/opfs/fs.js'
+import { boundedWal } from '../src/store/pglite-worker.js'
 import { nodeSyncIo } from './opfs-fixtures.js'
 
 const dirs: string[] = []
@@ -54,10 +55,10 @@ describe('BoundedOpfsFS with PGlite', () => {
     const a = await open(dir)
     await a.exec('create table kept (x int); insert into kept values (42)')
     await a.close()
-    // Torn line from an interrupted append, and a file no node references.
+    // A file unlinked just before the session ended (its contents still there), then a torn line from an interrupted append.
     const active = ['meta-0', 'meta-1'].map((n) => ({ n, size: fs.statSync(path.join(dir, n)).size, mtime: fs.statSync(path.join(dir, n)).mtimeMs }))
     const newest = active.sort((x, y) => y.mtime - x.mtime)[0]!.n
-    fs.appendFileSync(path.join(dir, newest), '\n["mkdir","/half')
+    fs.appendFileSync(path.join(dir, newest), '\n["create","/orphan",999999,33206,0]\n["unlink","/orphan"]\n["mkdir","/half')
     fs.writeFileSync(path.join(dir, 'd999999'), 'orphan')
     fs.writeFileSync(path.join(dir, 'not-ours.txt'), 'leave me')
 
@@ -96,8 +97,106 @@ describe('BoundedOpfsFS with PGlite', () => {
     const b = await PGlite.create({ fs: new BoundedOpfsFS('test', { io }), extensions: { vector } })
     expect((await b.query<{ x: number }>('select x from t')).rows[0]?.x).toBe(1)
     await b.close()
-    expect(io.calls.sizes).toBe(1)
-    // Postgres stats hundreds of files at startup; only files it creates or grows need asking again.
+    // The snapshot knows every size; at most the files resized since are asked for, in one call.
+    expect(io.calls.sizes ?? 0).toBe(0)
+    expect(io.calls.sizesOf ?? 0).toBeLessThanOrEqual(1)
     expect(io.calls.size ?? 0).toBeLessThan(20)
+  })
+
+  it('knows the sizes of files written after the snapshot, after a crash', async () => {
+    const dir = tmp()
+    const a = await open(dir)
+    await a.exec('create table g (x text)')
+    await a.close()
+    const b = await open(dir)
+    // Grows the table's file after the snapshot; no close().
+    await b.exec(`insert into g select repeat('x', 500) from generate_series(1, 2000)`)
+    const io = nodeSyncIo(dir)
+    const c = await PGlite.create({ fs: new BoundedOpfsFS('test', { io }), extensions: { vector } })
+    expect((await c.query<{ n: number }>('select count(*)::int as n from g')).rows[0]?.n).toBe(2000)
+    expect(io.calls.sizesOf).toBe(1)
+    await c.close()
+  })
+
+  it('distrusts sizes an older version carried into its next snapshot', async () => {
+    const dir = tmp()
+    const a = await open(dir)
+    await a.exec('create table carried (x text)')
+    await a.close()
+    // An older version: next generation, the same (now stale) sizes, the table grown without a journaled resize.
+    const [newer] = ['meta-0', 'meta-1']
+      .map((n) => ({ n, text: fs.readFileSync(path.join(dir, n), 'utf8') }))
+      .filter((m) => m.text)
+      .sort((x, y) => JSON.parse(y.text.split('\n')[0]!).gen - JSON.parse(x.text.split('\n')[0]!).gen)
+    const snapshot = JSON.parse(newer!.text.split('\n')[0]!)
+    const other = newer!.n === 'meta-0' ? 'meta-1' : 'meta-0'
+    fs.writeFileSync(path.join(dir, other), JSON.stringify({ ...snapshot, gen: snapshot.gen + 1 }))
+    const io = nodeSyncIo(dir)
+    const b = await PGlite.create({ fs: new BoundedOpfsFS('test', { io }), extensions: { vector } })
+    expect(io.calls.sizes).toBe(1)
+    await b.exec(`insert into carried values ('ok')`)
+    expect((await b.query<{ x: string }>('select x from carried')).rows[0]?.x).toBe('ok')
+    await b.close()
+  })
+
+  it('opens a database whose snapshot has no sizes (an older version) by listing every file once', async () => {
+    const dir = tmp()
+    const a = await open(dir)
+    await a.exec('create table old (x int); insert into old values (3)')
+    await a.close()
+    for (const n of ['meta-0', 'meta-1']) {
+      const [first, ...rest] = fs.readFileSync(path.join(dir, n), 'utf8').split('\n')
+      if (!first) continue
+      const { sizes, ...snapshot } = JSON.parse(first)
+      expect(sizes).toBeDefined()
+      fs.writeFileSync(path.join(dir, n), [JSON.stringify(snapshot), ...rest].join('\n'))
+    }
+    const io = nodeSyncIo(dir)
+    const b = await PGlite.create({ fs: new BoundedOpfsFS('test', { io }), extensions: { vector } })
+    expect((await b.query<{ x: number }>('select x from old')).rows[0]?.x).toBe(3)
+    expect(io.calls.sizes).toBe(1)
+    await b.close()
+  })
+
+  it('reads ahead: a table read in order takes a few round trips, not one per 8 KB page', async () => {
+    const dir = tmp()
+    const a = await open(dir)
+    await a.exec(`create table big (x text); insert into big select repeat(md5(i::text), 20) from generate_series(1, 4000) i`)
+    const { rows } = await a.query<{ pages: number }>(`select pg_relation_size('big')::int / 8192 as pages`)
+    await a.close()
+    const io = nodeSyncIo(dir)
+    const b = await PGlite.create({ fs: new BoundedOpfsFS('test', { io }), extensions: { vector } })
+    const before = io.calls.read ?? 0
+    expect((await b.query<{ n: number }>('select count(*)::int as n from big')).rows[0]?.n).toBe(4000)
+    expect((io.calls.read ?? 0) - before).toBeLessThan(rows[0]!.pages / 4)
+    await b.close()
+  })
+
+  it('reads what was written since a chunk was read ahead', async () => {
+    const dir = tmp()
+    const fsys = new BoundedOpfsFS('test', { io: nodeSyncIo(dir) })
+    await fsys.init({} as never, {} as never)
+    fsys.writeFile('/f', new Uint8Array(100_000).fill(1))
+    const fd = fsys.open('/f')
+    const buf = new Uint8Array(8)
+    fsys.read(fd, buf, 0, 8, 50_000)
+    expect([...buf]).toEqual(new Array(8).fill(1))
+    fsys.write(fd, new Uint8Array(8).fill(2), 0, 8, 50_004)
+    fsys.read(fd, buf, 0, 8, 50_000)
+    expect([...buf]).toEqual([1, 1, 1, 1, 2, 2, 2, 2])
+    // Past the old end: the read-ahead chunk mustn't hide what was appended.
+    fsys.write(fd, new Uint8Array(4).fill(3), 0, 4, 100_000)
+    const tail = new Uint8Array(6)
+    expect(fsys.read(fd, tail, 0, 6, 99_998)).toBe(6)
+    expect([...tail]).toEqual([1, 1, 3, 3, 3, 3])
+  })
+})
+
+describe('worker databases', () => {
+  it('cap the write-ahead log, so a start never replays more than that', () => {
+    const params = boundedWal(64)
+    expect(params[0]).toBe('--single')
+    expect(params).toContain('max_wal_size=64MB')
+    expect(params).toContain('min_wal_size=32MB')
   })
 })

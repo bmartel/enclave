@@ -33,6 +33,7 @@ export const OP = {
   list: 7,
   close: 8,
   sizes: 9,
+  sizesOf: 10,
 } as const
 export type Op = (typeof OP)[keyof typeof OP]
 
@@ -121,6 +122,8 @@ export interface SyncIo {
    * startup means a round trip, and an OPFS handle opened, per file.
    */
   sizes?(): Record<string, number>
+  /** The sizes of some files in one call (name → bytes; 0 for a missing file). Optional. */
+  sizesOf?(names: string[]): Record<string, number>
   /** Flush and close all handles. */
   close(): void
 }

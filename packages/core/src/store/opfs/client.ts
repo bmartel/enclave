@@ -95,6 +95,14 @@ export class SharedIoClient implements SyncIo {
     return JSON.parse(decoder.decode(this.#bytes.slice(NAME_BYTES, NAME_BYTES + n))) as Record<string, number>
   }
 
+  sizesOf(names: string[]): Record<string, number> {
+    const request = encoder.encode(JSON.stringify(names))
+    if (request.byteLength > this.#payload) throw new FsError(28, 'too many names for one call')
+    this.#bytes.set(request, NAME_BYTES)
+    const n = this.#call(OP.sizesOf, '', 0, request.byteLength)
+    return JSON.parse(decoder.decode(this.#bytes.slice(NAME_BYTES, NAME_BYTES + n))) as Record<string, number>
+  }
+
   close(): void {
     this.#call(OP.close, '')
   }
