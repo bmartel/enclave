@@ -18,6 +18,10 @@ export function serveOpfsIo(): void {
     const msg = event.data as InitMessage
     if (msg?.type !== 'enclave:opfs-init') return
     try {
+      // The previous page's I/O worker (a reload, a navigation) is torn down after its database worker
+      // released the leader lock, so it can still hold this directory's access handles while ours starts:
+      // wait until it is gone instead of failing the first open with NoModificationAllowedError.
+      await holdDirectoryLock(msg.root)
       const dir = await opfsDirectory(msg.root)
       const cache = new HandleCache(opfsSource(dir), { maxOpen: msg.maxOpenHandles })
       const server = serveSharedIo(msg.control, msg.data, cache)
@@ -29,6 +33,50 @@ export function serveOpfsIo(): void {
   })
 }
 
+/** Longest wait for another I/O worker to let go of the directory before giving up (the caller may retry). */
+export const DIRECTORY_LOCK_TIMEOUT_MS = 15_000
+
+/**
+ * Hold a Web Lock named after the directory for this worker's whole life (the
+ * browser releases it when the worker ends, however it ends). Rejects when
+ * another worker keeps it for longer than DIRECTORY_LOCK_TIMEOUT_MS. Without
+ * Web Locks it returns at once: access handles then rely on openWhenFree.
+ */
+export function holdDirectoryLock(root: string, timeoutMs = DIRECTORY_LOCK_TIMEOUT_MS): Promise<void> {
+  const locks = (globalThis.navigator as Navigator | undefined)?.locks
+  if (!locks?.request) return Promise.resolve()
+  return new Promise<void>((resolve, reject) => {
+    const signal = AbortSignal.timeout(timeoutMs)
+    locks
+      .request(`enclave-opfs:${root}`, { signal }, () => {
+        resolve()
+        return new Promise<void>(() => {}) // held until the worker ends
+      })
+      .catch((err: unknown) =>
+        reject((err as { name?: string })?.name === 'TimeoutError' ? new Error(`the database files in ${root} are still in use by another worker`) : err),
+      )
+  })
+}
+
+/** Waits before trying a handle again while another worker still holds it (about 3 s in all). */
+const BUSY_RETRY_MS = [50, 100, 200, 400, 800, 1500]
+
+/**
+ * createSyncAccessHandle, trying again for a few seconds while another worker
+ * still holds the file (a closing page's I/O worker, between its lock's
+ * release and its handles'): NoModificationAllowedError then passes.
+ */
+export async function openWhenFree(open: () => Promise<FileSystemSyncAccessHandle>, delays = BUSY_RETRY_MS): Promise<FileSystemSyncAccessHandle> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await open()
+    } catch (err) {
+      if ((err as { name?: string })?.name !== 'NoModificationAllowedError' || attempt >= delays.length) throw err
+      await new Promise((r) => setTimeout(r, delays[attempt]))
+    }
+  }
+}
+
 async function opfsDirectory(path: string): Promise<FileSystemDirectoryHandle> {
   let dir = await navigator.storage.getDirectory()
   for (const part of path.split('/').filter(Boolean)) dir = await dir.getDirectoryHandle(part, { create: true })
@@ -38,7 +86,10 @@ async function opfsDirectory(path: string): Promise<FileSystemDirectoryHandle> {
 /** HandleSource backed by one OPFS directory. */
 export function opfsSource(dir: FileSystemDirectoryHandle): HandleSource {
   return {
-    open: async (name) => (await dir.getFileHandle(name, { create: true })).createSyncAccessHandle(),
+    open: async (name) => {
+      const file = await dir.getFileHandle(name, { create: true })
+      return openWhenFree(() => file.createSyncAccessHandle())
+    },
     remove: (name) => dir.removeEntry(name),
     list: async () => {
       const names: string[] = []
