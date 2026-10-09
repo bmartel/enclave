@@ -1,0 +1,634 @@
+{
+  "date": "2026-10-09T19:58:30.683Z",
+  "queries": 91,
+  "rows": [
+    {
+      "label": "embeddinggemma v1 q8",
+      "loadMs": 8004,
+      "ingestMs": 4308,
+      "chunks": 45,
+      "msPerChunk": 95.7,
+      "search/vector": {
+        "recallAt1": 0.879,
+        "recallAt3": 0.995,
+        "ci": [
+          0.96,
+          1
+        ],
+        "mrr": 0.932,
+        "ndcg": 0.945,
+        "msPerQuery": 48,
+        "multilingual": "10/10",
+        "misses": []
+      },
+      "search/hybrid": {
+        "recallAt1": 0.813,
+        "recallAt3": 0.951,
+        "ci": [
+          0.89,
+          0.98
+        ],
+        "mrr": 0.899,
+        "ndcg": 0.91,
+        "msPerQuery": 50,
+        "multilingual": "8/10",
+        "misses": [
+          "how do visitors get internet access at headquarters → fac-offices, fac-parking-toronto, it-badges (want it-wifi-toronto)",
+          "can I charge my electric car at the office → fac-parking-berlin, fac-offices, hr-remote-work (want fac-parking-toronto)",
+          "when is the works council meeting → hr-remote-work, it-mobile-devices, fac-meeting-rooms (want de-berlin-intern)",
+          "lost and found in the berlin office → fac-parking-berlin, fac-offices, it-wifi-berlin (want de-berlin-intern)"
+        ]
+      },
+      "question-answering/vector": {
+        "recallAt1": 0.89,
+        "recallAt3": 0.989,
+        "ci": [
+          0.94,
+          1
+        ],
+        "mrr": 0.938,
+        "ndcg": 0.95,
+        "msPerQuery": 47,
+        "multilingual": "9/10",
+        "misses": [
+          "lost and found in the berlin office → fac-parking-berlin, it-wifi-berlin, fac-offices (want de-berlin-intern)"
+        ]
+      },
+      "question-answering/hybrid": {
+        "recallAt1": 0.78,
+        "recallAt3": 0.951,
+        "ci": [
+          0.89,
+          0.98
+        ],
+        "mrr": 0.894,
+        "ndcg": 0.906,
+        "msPerQuery": 47,
+        "multilingual": "8/10",
+        "misses": [
+          "how do visitors get internet access at headquarters → fac-parking-toronto, fac-offices, it-badges (want it-wifi-toronto)",
+          "can I charge my electric car at the office → fac-parking-berlin, fac-offices, hr-remote-work (want fac-parking-toronto)",
+          "when is the works council meeting → hr-remote-work, fac-meeting-rooms, it-mobile-devices (want de-berlin-intern)",
+          "lost and found in the berlin office → fac-parking-berlin, fac-offices, it-wifi-berlin (want de-berlin-intern)"
+        ]
+      },
+      "relevance": {
+        "floor": 0.31,
+        "onKept": 89,
+        "onTotal": 91,
+        "offSilenced": 7,
+        "offTotal": 18,
+        "onMedian": 0.512,
+        "offMax": 0.55
+      }
+    },
+    {
+      "label": "embeddinggemma v1 q4",
+      "loadMs": 1059,
+      "ingestMs": 2398,
+      "chunks": 45,
+      "msPerChunk": 53.3,
+      "search/vector": {
+        "recallAt1": 0.89,
+        "recallAt3": 0.995,
+        "ci": [
+          0.96,
+          1
+        ],
+        "mrr": 0.94,
+        "ndcg": 0.95,
+        "msPerQuery": 10,
+        "multilingual": "10/10",
+        "misses": []
+      },
+      "search/hybrid": {
+        "recallAt1": 0.813,
+        "recallAt3": 0.951,
+        "ci": [
+          0.89,
+          0.98
+        ],
+        "mrr": 0.888,
+        "ndcg": 0.901,
+        "msPerQuery": 10,
+        "multilingual": "8/10",
+        "misses": [
+          "how do visitors get internet access at headquarters → fac-parking-toronto, it-badges, fac-parking-berlin (want it-wifi-toronto)",
+          "can I charge my electric car at the office → fac-parking-berlin, fac-offices, hr-remote-work (want fac-parking-toronto)",
+          "when is the works council meeting → hr-remote-work, it-mobile-devices, fac-meeting-rooms (want de-berlin-intern)",
+          "lost and found in the berlin office → it-wifi-berlin, fac-parking-berlin, fac-offices (want de-berlin-intern)"
+        ]
+      },
+      "sims": {
+        "on": [
+          0.76,
+          0.585,
+          0.533,
+          0.677,
+          0.527,
+          0.627,
+          0.55,
+          0.492,
+          0.451,
+          0.506,
+          0.526,
+          0.501,
+          0.384,
+          0.565,
+          0.35,
+          0.454,
+          0.446,
+          0.472,
+          0.449,
+          0.522,
+          0.443,
+          0.416,
+          0.574,
+          0.566,
+          0.425,
+          0.449,
+          0.473,
+          0.551,
+          0.371,
+          0.684,
+          0.536,
+          0.773,
+          0.65,
+          0.483,
+          0.531,
+          0.532,
+          0.526,
+          0.586,
+          0.489,
+          0.532,
+          0.618,
+          0.536,
+          0.535,
+          0.545,
+          0.501,
+          0.557,
+          0.453,
+          0.547,
+          0.567,
+          0.302,
+          0.43,
+          0.598,
+          0.578,
+          0.59,
+          0.649,
+          0.478,
+          0.561,
+          0.5,
+          0.615,
+          0.263,
+          0.509,
+          0.542,
+          0.521,
+          0.675,
+          0.539,
+          0.449,
+          0.651,
+          0.471,
+          0.441,
+          0.461,
+          0.405,
+          0.643,
+          0.48,
+          0.67,
+          0.487,
+          0.558,
+          0.504,
+          0.711,
+          0.654,
+          0.468,
+          0.607,
+          0.575,
+          0.427,
+          0.521,
+          0.502,
+          0.655,
+          0.535,
+          0.632,
+          0.583,
+          0.474,
+          0.511
+        ],
+        "off": [
+          0.284,
+          0.238,
+          0.531,
+          0.482,
+          0.342,
+          0.365,
+          0.373,
+          0.55,
+          0.526,
+          0.475,
+          0.428,
+          0.274,
+          0.383,
+          0.305,
+          0.14,
+          0.157,
+          0.42,
+          0.228
+        ]
+      },
+      "relevance": {
+        "floor": 0.35,
+        "onKept": 88,
+        "onTotal": 91,
+        "offSilenced": 8,
+        "offTotal": 18,
+        "onMedian": 0.531,
+        "offMax": 0.55
+      }
+    },
+    {
+      "label": "embeddinggemma-2 q8",
+      "loadMs": 524,
+      "ingestMs": 6000,
+      "chunks": 45,
+      "msPerChunk": 133.3,
+      "search/vector": {
+        "recallAt1": 0.835,
+        "recallAt3": 0.973,
+        "ci": [
+          0.92,
+          0.99
+        ],
+        "mrr": 0.903,
+        "ndcg": 0.919,
+        "msPerQuery": 45,
+        "multilingual": "9/10",
+        "misses": [
+          "deadline to submit receipts → legal-privacy-requests, fac-guests, legal-retention (want fin-expenses-2026)",
+          "lost and found in the berlin office → fac-parking-berlin, fac-offices, it-wifi-berlin (want de-berlin-intern)"
+        ]
+      },
+      "search/hybrid": {
+        "recallAt1": 0.824,
+        "recallAt3": 0.951,
+        "ci": [
+          0.89,
+          0.98
+        ],
+        "mrr": 0.896,
+        "ndcg": 0.907,
+        "msPerQuery": 46,
+        "multilingual": "8/10",
+        "misses": [
+          "how do visitors get internet access at headquarters → it-badges, fac-guests, fac-parking-berlin (want it-wifi-toronto)",
+          "can I charge my electric car at the office → fac-parking-berlin, fac-offices, it-badges (want fac-parking-toronto)",
+          "when is the works council meeting → hr-remote-work, fac-meeting-rooms, it-passwords (want de-berlin-intern)",
+          "lost and found in the berlin office → fac-offices, fac-parking-berlin, it-wifi-berlin (want de-berlin-intern)"
+        ]
+      },
+      "question-answering/vector": {
+        "recallAt1": 0.824,
+        "recallAt3": 0.973,
+        "ci": [
+          0.92,
+          0.99
+        ],
+        "mrr": 0.897,
+        "ndcg": 0.913,
+        "msPerQuery": 46,
+        "multilingual": "9/10",
+        "misses": [
+          "deadline to submit receipts → legal-privacy-requests, legal-retention, fac-guests (want fin-expenses-2026)",
+          "lost and found in the berlin office → fac-parking-berlin, fac-offices, it-wifi-berlin (want de-berlin-intern)"
+        ]
+      },
+      "question-answering/hybrid": {
+        "recallAt1": 0.824,
+        "recallAt3": 0.951,
+        "ci": [
+          0.89,
+          0.98
+        ],
+        "mrr": 0.89,
+        "ndcg": 0.903,
+        "msPerQuery": 50,
+        "multilingual": "8/10",
+        "misses": [
+          "how do visitors get internet access at headquarters → it-badges, fac-guests, fac-parking-berlin (want it-wifi-toronto)",
+          "can I charge my electric car at the office → fac-parking-berlin, fac-offices, hr-remote-work (want fac-parking-toronto)",
+          "when is the works council meeting → hr-remote-work, fac-meeting-rooms, it-passwords (want de-berlin-intern)",
+          "lost and found in the berlin office → fac-offices, fac-parking-berlin, it-wifi-berlin (want de-berlin-intern)"
+        ]
+      },
+      "relevance": {
+        "floor": 0.66,
+        "onKept": 87,
+        "onTotal": 91,
+        "offSilenced": 7,
+        "offTotal": 18,
+        "onMedian": 0.742,
+        "offMax": 0.784
+      }
+    },
+    {
+      "label": "embeddinggemma-2 q4",
+      "loadMs": 703,
+      "ingestMs": 6007,
+      "chunks": 45,
+      "msPerChunk": 133.5,
+      "search/vector": {
+        "recallAt1": 0.824,
+        "recallAt3": 0.984,
+        "ci": [
+          0.94,
+          1
+        ],
+        "mrr": 0.903,
+        "ndcg": 0.92,
+        "msPerQuery": 28,
+        "multilingual": "10/10",
+        "misses": [
+          "when should the battery be replaced → it-laptop-refresh, prod-firmware-notes, prod-accessories (want prod-troubleshooting)"
+        ]
+      },
+      "search/hybrid": {
+        "recallAt1": 0.835,
+        "recallAt3": 0.951,
+        "ci": [
+          0.89,
+          0.98
+        ],
+        "mrr": 0.897,
+        "ndcg": 0.907,
+        "msPerQuery": 22,
+        "multilingual": "8/10",
+        "misses": [
+          "how do visitors get internet access at headquarters → it-badges, fac-parking-berlin, fac-guests (want it-wifi-toronto)",
+          "can I charge my electric car at the office → fac-parking-berlin, fac-offices, prod-accessories (want fac-parking-toronto)",
+          "when is the works council meeting → hr-remote-work, fac-meeting-rooms, it-passwords (want de-berlin-intern)",
+          "lost and found in the berlin office → fac-offices, fac-parking-berlin, it-wifi-berlin (want de-berlin-intern)"
+        ]
+      },
+      "question-answering/vector": {
+        "recallAt1": 0.835,
+        "recallAt3": 0.973,
+        "ci": [
+          0.92,
+          0.99
+        ],
+        "mrr": 0.903,
+        "ndcg": 0.917,
+        "msPerQuery": 21,
+        "multilingual": "9/10",
+        "misses": [
+          "when should the battery be replaced → it-laptop-refresh, prod-firmware-notes, prod-accessories (want prod-troubleshooting)",
+          "lost and found in the berlin office → fac-parking-berlin, fac-offices, it-wifi-berlin (want de-berlin-intern)"
+        ]
+      },
+      "question-answering/hybrid": {
+        "recallAt1": 0.835,
+        "recallAt3": 0.951,
+        "ci": [
+          0.89,
+          0.98
+        ],
+        "mrr": 0.899,
+        "ndcg": 0.909,
+        "msPerQuery": 20,
+        "multilingual": "8/10",
+        "misses": [
+          "how do visitors get internet access at headquarters → it-badges, fac-parking-berlin, fac-guests (want it-wifi-toronto)",
+          "can I charge my electric car at the office → fac-parking-berlin, fac-offices, hr-remote-work (want fac-parking-toronto)",
+          "when is the works council meeting → hr-remote-work, fac-meeting-rooms, it-passwords (want de-berlin-intern)",
+          "lost and found in the berlin office → fac-parking-berlin, fac-offices, it-wifi-berlin (want de-berlin-intern)"
+        ]
+      },
+      "sims": {
+        "on": [
+          0.868,
+          0.815,
+          0.733,
+          0.85,
+          0.786,
+          0.778,
+          0.764,
+          0.729,
+          0.732,
+          0.746,
+          0.754,
+          0.704,
+          0.644,
+          0.744,
+          0.664,
+          0.682,
+          0.746,
+          0.767,
+          0.755,
+          0.708,
+          0.693,
+          0.712,
+          0.794,
+          0.739,
+          0.688,
+          0.691,
+          0.71,
+          0.785,
+          0.675,
+          0.746,
+          0.751,
+          0.903,
+          0.765,
+          0.736,
+          0.708,
+          0.706,
+          0.72,
+          0.766,
+          0.667,
+          0.764,
+          0.789,
+          0.789,
+          0.757,
+          0.79,
+          0.731,
+          0.759,
+          0.714,
+          0.791,
+          0.816,
+          0.685,
+          0.731,
+          0.796,
+          0.758,
+          0.787,
+          0.841,
+          0.713,
+          0.724,
+          0.687,
+          0.771,
+          0.62,
+          0.729,
+          0.785,
+          0.704,
+          0.819,
+          0.763,
+          0.703,
+          0.748,
+          0.694,
+          0.716,
+          0.744,
+          0.733,
+          0.806,
+          0.731,
+          0.774,
+          0.7,
+          0.735,
+          0.719,
+          0.818,
+          0.805,
+          0.691,
+          0.788,
+          0.792,
+          0.695,
+          0.708,
+          0.726,
+          0.812,
+          0.725,
+          0.792,
+          0.758,
+          0.72,
+          0.698
+        ],
+        "off": [
+          0.686,
+          0.618,
+          0.72,
+          0.726,
+          0.664,
+          0.672,
+          0.679,
+          0.787,
+          0.69,
+          0.711,
+          0.663,
+          0.672,
+          0.665,
+          0.653,
+          0.532,
+          0.553,
+          0.725,
+          0.605
+        ]
+      },
+      "relevance": {
+        "floor": 0.66,
+        "onKept": 89,
+        "onTotal": 91,
+        "offSilenced": 5,
+        "offTotal": 18,
+        "onMedian": 0.744,
+        "offMax": 0.787
+      }
+    },
+    {
+      "label": "embeddinggemma-2 q8 @512",
+      "loadMs": 0,
+      "ingestMs": 5661,
+      "chunks": 45,
+      "msPerChunk": 125.8,
+      "search/vector": {
+        "recallAt1": 0.868,
+        "recallAt3": 0.973,
+        "ci": [
+          0.92,
+          0.99
+        ],
+        "mrr": 0.919,
+        "ndcg": 0.931,
+        "msPerQuery": 52,
+        "multilingual": "9/10",
+        "misses": [
+          "deadline to submit receipts → legal-privacy-requests, legal-retention, fac-guests (want fin-expenses-2026)",
+          "lost and found in the berlin office → fac-parking-berlin, fac-offices, it-wifi-berlin (want de-berlin-intern)"
+        ]
+      },
+      "search/hybrid": {
+        "recallAt1": 0.846,
+        "recallAt3": 0.951,
+        "ci": [
+          0.89,
+          0.98
+        ],
+        "mrr": 0.901,
+        "ndcg": 0.911,
+        "msPerQuery": 46,
+        "multilingual": "8/10",
+        "misses": [
+          "how do visitors get internet access at headquarters → fac-guests, it-badges, fac-parking-berlin (want it-wifi-toronto)",
+          "can I charge my electric car at the office → fac-parking-berlin, fac-offices, hr-remote-work (want fac-parking-toronto)",
+          "when is the works council meeting → hr-remote-work, fac-meeting-rooms, it-passwords (want de-berlin-intern)",
+          "lost and found in the berlin office → fac-parking-berlin, fac-offices, it-wifi-berlin (want de-berlin-intern)"
+        ]
+      },
+      "relevance": {
+        "floor": 0.66,
+        "onKept": 88,
+        "onTotal": 91,
+        "offSilenced": 7,
+        "offTotal": 18,
+        "onMedian": 0.745,
+        "offMax": 0.784
+      }
+    },
+    {
+      "label": "embeddinggemma-2 q8 @256",
+      "loadMs": 0,
+      "ingestMs": 5484,
+      "chunks": 45,
+      "msPerChunk": 121.9,
+      "search/vector": {
+        "recallAt1": 0.813,
+        "recallAt3": 0.929,
+        "ci": [
+          0.86,
+          0.97
+        ],
+        "mrr": 0.872,
+        "ndcg": 0.884,
+        "msPerQuery": 44,
+        "multilingual": "8/10",
+        "misses": [
+          "how do visitors get internet access at headquarters → fac-guests, it-badges, it-wifi-berlin (want it-wifi-toronto)",
+          "deadline to submit receipts → legal-privacy-requests, legal-retention, eng-oncall (want fin-expenses-2026)",
+          "can I claim my gym membership → ben-enrollment, it-badges, vendor-newsletter (want fin-expenses-2026)",
+          "when should the battery be replaced → it-laptop-refresh, prod-accessories, eng-oncall (want prod-troubleshooting)",
+          "when is the works council meeting → hr-vacation-2026, eng-oncall, hr-vacation-2024 (want de-berlin-intern)",
+          "lost and found in the berlin office → fac-parking-berlin, fac-offices, it-wifi-berlin (want de-berlin-intern)"
+        ]
+      },
+      "search/hybrid": {
+        "recallAt1": 0.835,
+        "recallAt3": 0.951,
+        "ci": [
+          0.89,
+          0.98
+        ],
+        "mrr": 0.892,
+        "ndcg": 0.903,
+        "msPerQuery": 49,
+        "multilingual": "8/10",
+        "misses": [
+          "how do visitors get internet access at headquarters → fac-guests, it-badges, it-vpn-2026 (want it-wifi-toronto)",
+          "can I charge my electric car at the office → fac-parking-berlin, prod-accessories, fac-offices (want fac-parking-toronto)",
+          "when is the works council meeting → hr-remote-work, fac-meeting-rooms, fac-guests (want de-berlin-intern)",
+          "lost and found in the berlin office → fac-parking-berlin, fac-offices, it-wifi-berlin (want de-berlin-intern)"
+        ]
+      },
+      "relevance": {
+        "floor": 0.68,
+        "onKept": 89,
+        "onTotal": 91,
+        "offSilenced": 6,
+        "offTotal": 18,
+        "onMedian": 0.758,
+        "offMax": 0.802
+      }
+    }
+  ]
+}

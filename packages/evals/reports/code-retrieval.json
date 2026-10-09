@@ -1,0 +1,76 @@
+{
+  "date": "2026-10-09T19:57:32.568Z",
+  "queries": 18,
+  "rows": [
+    {
+      "label": "embeddinggemma v1 q4",
+      "search/vector": {
+        "recallAt1": 1,
+        "recallAt3": 1,
+        "mrr": 1,
+        "misses": []
+      },
+      "search/hybrid": {
+        "recallAt1": 0.833,
+        "recallAt3": 0.944,
+        "mrr": 0.88,
+        "misses": [
+          "call a weather API and print the temperature → py-json-ages (want js-fetch-weather)",
+          "turn CSV text into objects keyed by the header → py-units-product (want js-csv-parse)",
+          "customers without any orders → sql-top-customers (want sql-never-ordered)"
+        ]
+      },
+      "code-retrieval/vector": {
+        "recallAt1": 1,
+        "recallAt3": 1,
+        "mrr": 1,
+        "misses": []
+      },
+      "code-retrieval/hybrid": {
+        "recallAt1": 0.833,
+        "recallAt3": 0.944,
+        "mrr": 0.88,
+        "misses": [
+          "call a weather API and print the temperature → py-json-ages (want js-fetch-weather)",
+          "turn CSV text into objects keyed by the header → py-revenue-region (want js-csv-parse)",
+          "customers without any orders → sql-top-customers (want sql-never-ordered)"
+        ]
+      }
+    },
+    {
+      "label": "embeddinggemma-2 q4",
+      "search/vector": {
+        "recallAt1": 1,
+        "recallAt3": 1,
+        "mrr": 1,
+        "misses": []
+      },
+      "search/hybrid": {
+        "recallAt1": 0.833,
+        "recallAt3": 0.944,
+        "mrr": 0.88,
+        "misses": [
+          "call a weather API and print the temperature → py-json-ages (want js-fetch-weather)",
+          "turn CSV text into objects keyed by the header → py-revenue-region (want js-csv-parse)",
+          "customers without any orders → sql-top-customers (want sql-never-ordered)"
+        ]
+      },
+      "code-retrieval/vector": {
+        "recallAt1": 1,
+        "recallAt3": 1,
+        "mrr": 1,
+        "misses": []
+      },
+      "code-retrieval/hybrid": {
+        "recallAt1": 0.833,
+        "recallAt3": 0.944,
+        "mrr": 0.88,
+        "misses": [
+          "call a weather API and print the temperature → py-json-ages (want js-fetch-weather)",
+          "turn CSV text into objects keyed by the header → py-revenue-region (want js-csv-parse)",
+          "customers without any orders → sql-top-customers (want sql-never-ordered)"
+        ]
+      }
+    }
+  ]
+}

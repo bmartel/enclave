@@ -14,7 +14,7 @@ import { FULL_CORPUS } from '../src/fixtures/corpus.js'
 import { RETRIEVAL_QUERIES } from '../src/retrieval.js'
 
 const run = !!process.env.ENCLAVE_E2E
-const EMBEDDINGS = ['embeddinggemma', 'granite-small-r2', 'granite-multilingual-r2', 'gte-small'] as const
+const EMBEDDINGS = ['embeddinggemma-2', 'embeddinggemma', 'granite-small-r2', 'granite-multilingual-r2', 'gte-small'] as const
 const rows: Record<string, unknown>[] = []
 
 async function knowledgeFor(preset: string, reranker?: string) {
