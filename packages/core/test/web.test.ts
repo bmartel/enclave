@@ -141,3 +141,16 @@ describe('token-budgeted batches', () => {
     expect(groupByTokens([], len, 4)).toEqual([])
   })
 })
+
+describe('model cache checks', () => {
+  it('finds config.json under the URL Transformers.js caches it by (browsers have no local models)', async () => {
+    const { cachedConfigUrl } = await import('../src/transformers/runtime.js')
+    expect(cachedConfigUrl({ remoteHost: 'https://huggingface.co/', remotePathTemplate: '{model}/resolve/{revision}/' }, 'onnx-community/embeddinggemma-2-ONNX')).toBe(
+      'https://huggingface.co/onnx-community/embeddinggemma-2-ONNX/resolve/main/config.json',
+    )
+    // Self-hosted mirrors (enclave-mirror's layout).
+    expect(cachedConfigUrl({ remoteHost: 'https://cdn.example.com/models/hf', remotePathTemplate: '/{model}/resolve/{revision}' }, 'org/m')).toBe(
+      'https://cdn.example.com/models/hf/org/m/resolve/main/config.json',
+    )
+  })
+})

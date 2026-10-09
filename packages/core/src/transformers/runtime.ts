@@ -41,6 +41,20 @@ export function groupByTokens(texts: string[], count: (text: string) => number, 
   return groups
 }
 
+interface TjsCacheEnv {
+  allowLocalModels: boolean
+  useBrowserCache: boolean
+  cacheKey?: string
+  remoteHost: string
+  remotePathTemplate: string
+}
+
+/** The URL Transformers.js caches a model's config.json under (its remote URL, `main` revision). */
+export function cachedConfigUrl(env: Pick<TjsCacheEnv, 'remoteHost' | 'remotePathTemplate'>, model: string): string {
+  const path = env.remotePathTemplate.replaceAll('{model}', model).replaceAll('{revision}', 'main')
+  return [env.remoteHost.replace(/\/+$/, ''), path.replace(/^\/+|\/+$/g, ''), 'config.json'].join('/')
+}
+
 /** Matryoshka truncation, then L2 normalization, as plain arrays. */
 function finish(tensor: any, dimensions?: number): number[][] {
   const native = tensor.dims.at(-1) as number
@@ -382,10 +396,11 @@ export class TransformersRuntime {
    * The config a text-only load uses: the repo's, without its vision and audio
    * encoders (else they would be loaded and downloaded too). Undefined otherwise.
    */
-  private async modelConfig(config: LoadConfig, progress_callback?: unknown, local_files_only = false): Promise<Record<string, unknown> | undefined> {
+  private async modelConfig(config: LoadConfig, progress_callback?: unknown): Promise<Record<string, unknown> | undefined> {
     if (!(config as EmbedConfig).textOnly) return undefined
     const tjs = await this.tjs()
-    const loaded = (await tjs.AutoConfig.from_pretrained(config.model, { progress_callback, local_files_only } as never)) as unknown as Record<string, unknown>
+    // A cached config.json is read from the cache (no network).
+    const loaded = (await tjs.AutoConfig.from_pretrained(config.model, { progress_callback } as never)) as unknown as Record<string, unknown>
     loaded.vision_config = null
     loaded.audio_config = null
     return loaded
@@ -423,10 +438,18 @@ export class TransformersRuntime {
     }
   }
 
-  /** Whether the model's config.json is in the browser cache (no network). */
+  /**
+   * Whether the model's config.json is in the cache (no network). In browsers
+   * Transformers.js disables local models, so `local_files_only` always throws
+   * there: look the file up in its Cache Storage, under its remote URL.
+   */
   private async configCached(model: string): Promise<boolean> {
     const tjs = await this.tjs()
+    const env = tjs.env as unknown as TjsCacheEnv
     try {
+      if (!env.allowLocalModels && env.useBrowserCache && typeof caches !== 'undefined') {
+        return !!(await (await caches.open(env.cacheKey ?? 'transformers-cache')).match(cachedConfigUrl(env, model)))
+      }
       await tjs.AutoConfig.from_pretrained(model, { local_files_only: true } as never)
       return true
     } catch {
@@ -438,7 +461,7 @@ export class TransformersRuntime {
   async cachedFiles(config: LoadConfig): Promise<{ file: string; cached: boolean }[]> {
     const tjs = await this.tjs()
     const { device, dtype } = await this.resolve(config)
-    const modelConfig = await this.modelConfig(config, undefined, true)
+    const modelConfig = await this.modelConfig(config)
     const result = await tjs.ModelRegistry.is_cached_files(config.model, { dtype: dtype as never, ...(device ? { device } : {}), ...(modelConfig ? { config: modelConfig as never } : {}) })
     return result.files
   }
@@ -448,8 +471,8 @@ export class TransformersRuntime {
     const tjs = await this.tjs()
     const { device, dtype } = await this.resolve(config)
     await this.unload(config.model)
-    // Text-only models: their config (the full one is fine here) may already be gone, so list without it.
-    const modelConfig = await this.modelConfig(config, undefined, true).catch(() => undefined)
+    // Text-only models: their files, by the text-only config (else every encoder's, which is harmless too).
+    const modelConfig = (await this.configCached(config.model)) ? await this.modelConfig(config).catch(() => undefined) : undefined
     await tjs.ModelRegistry.clear_cache(config.model, { dtype: dtype as never, ...(device ? { device } : {}), ...(modelConfig ? { config: modelConfig as never } : {}) })
   }
 
