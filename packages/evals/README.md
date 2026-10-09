@@ -47,6 +47,22 @@ Reports give pass rates with 95% Wilson intervals, per-tag breakdowns, and consi
 
 `src/retrieval.ts` has 91 labeled queries covering keyword, paraphrase, versioning, near-miss, long-document, table, false-premise and multilingual lookups (German, French and Spanish queries, and a German document). `test/retrieval.e2e.test.ts` runs them with real embedding models and rerankers on CPU, and writes `reports/retrieval.json`.
 
+### EmbeddingGemma 2 (2026-10)
+
+`test/embedding-upgrade.e2e.test.ts` compares EmbeddingGemma 2 with v1 on the same 91 queries (CPU, Node; `reports/embedding-upgrade.json`), including the question-answering prompt, Matryoshka sizes and the relevance floor. `test/code-retrieval.e2e.test.ts` asks 18 questions about 16 notebook cells (`src/code-retrieval.ts`).
+
+| Model (vector search) | recall@1 | recall@3 (95% CI) | MRR | multilingual | ms/chunk (CPU) | floor: on-topic kept, conversational silenced |
+|---|---|---|---|---|---|---|
+| v1 q4 | 0.890 | 0.995 (0.96–1) | 0.940 | 10/10 | 52 | 0.35: 89/91, 8/18 |
+| v1 q8 | 0.879 | 0.995 (0.96–1) | 0.932 | 10/10 | 96 | 0.31: 89/91, 7/18 |
+| v2 q4 | 0.824 | 0.984 (0.94–1) | 0.903 | 10/10 | 128 | 0.66: 89/91, 5/18 (0.67: 87/91, 8/18) |
+| v2 q8 | 0.835 | 0.973 (0.92–0.99) | 0.903 | 9/10 | 133 | 0.66: 87/91, 7/18 |
+| v2 q4, question-answering prompt | 0.835 | 0.973 | 0.903 | 9/10 | | |
+| v2 q8 @512 | 0.868 | 0.973 | 0.919 | 9/10 | 126 | |
+| v2 q8 @256 | 0.813 | 0.929 | 0.872 | 8/10 | 122 | |
+
+Hybrid search: 0.951 recall@3 for every row. Code search: both models find every cell first (recall@1 1.0, vector), with either prompt; the set is at ceiling. On Vellum's in-browser retrieval eval (WebGPU; pages, a PDF, a sheet and a deck, plus questions in nine other languages) v2 q4 scored recall@3 1.000 vs 0.972, MRR 0.940 vs 0.934, at 22 vs 24 ms per chunk, so it is the default on WebGPU desktops; v2's cosines are compressed (on-topic median 0.74, conversational up to 0.79), hence the 0.66 floor.
+
 ## Results (Qwen3 4B, WebGPU, 3 repeats)
 
 | Report | Runs passed | Cases passing all repeats |
