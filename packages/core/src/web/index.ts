@@ -28,7 +28,7 @@ import {
   type LLMChoice,
   type RerankerPreset,
 } from './catalog.js'
-import { detectDevice, persistStorage, type DeviceProfile } from './device.js'
+import { detectDevice, overrideDevice, persistStorage, type DeviceProfile } from './device.js'
 
 export * from './catalog.js'
 export * from './device.js'
@@ -134,6 +134,12 @@ export interface WebEnclaveOptions extends Omit<EnclaveOptions, 'db' | 'model' |
   reranker?: 'auto' | string | Reranker | false
   /** Override the GPU memory budget used to pick models, in MB. */
   gpuBudgetMB?: number
+  /**
+   * Replace fields of the detected device profile (development and evals):
+   * `{ shaderF16: false, discreteGpu: true }` runs the full-precision builds a
+   * desktop card without half precision gets. The budget is estimated again.
+   */
+  deviceOverrides?: Partial<DeviceProfile>
   /** Largest first download `auto` may choose, in MB. Default 2500. */
   maxDownloadMB?: number
   /**
@@ -208,7 +214,8 @@ export async function createWebEnclave(options: WebEnclaveOptions = {}): Promise
   const workers = options.workers ?? {}
 
   report({ stage: 'device', text: 'Checking device capabilities…' })
-  const device = await detectDevice(options.gpuBudgetMB !== undefined ? { gpuBudgetMB: options.gpuBudgetMB } : {})
+  const detected = await detectDevice(options.gpuBudgetMB !== undefined ? { gpuBudgetMB: options.gpuBudgetMB } : {})
+  const device = options.deviceOverrides ? overrideDevice(detected, options.deviceOverrides, options.gpuBudgetMB) : detected
   if (options.persist ?? true) void persistStorage()
 
   report({ stage: 'database', text: 'Opening database…' })
@@ -236,6 +243,8 @@ export async function createWebEnclave(options: WebEnclaveOptions = {}): Promise
     embedder = transformersEmbedder({
       preset,
       preload: true,
+      // A profile without half precision gets the f32 build even where the worker's adapter has it (overrides).
+      ...(device.webgpu && !device.shaderF16 ? { dtype: { ...preset.dtype, webgpu: preset.dtype.webgpuF32 } } : {}),
       ...(workers.ml ? { worker: workers.ml } : {}),
       onProgress: fileProgress('embedding', report),
     })
@@ -293,7 +302,7 @@ export async function createWebEnclave(options: WebEnclaveOptions = {}): Promise
   }
   if (options.preloadLLM) await (model as { load?(): Promise<void> }).load?.()
 
-  const { workers: _w, dataDir: _d, db: _db, llm: _l, embedding: _e, reranker: _r, gpuBudgetMB: _g, maxDownloadMB: _m, selfHost: _sh, thinking: _t, webllm: _wl, persist: _p, preloadLLM: _pl, onProgress: _o, ...rest } = options
+  const { workers: _w, dataDir: _d, db: _db, llm: _l, embedding: _e, reranker: _r, gpuBudgetMB: _g, deviceOverrides: _do, maxDownloadMB: _m, selfHost: _sh, thinking: _t, webllm: _wl, persist: _p, preloadLLM: _pl, onProgress: _o, ...rest } = options
   const enclave = await createEnclave({
     ...rest,
     db,

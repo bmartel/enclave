@@ -101,6 +101,8 @@ const ai = await createWebEnclave({
 
 `createWebEnclave` checks what the device can handle (WebGPU support and GPU memory) and picks a model to match. On a typical laptop that's Qwen3 4B, a 2.3 GB download. It downloads on the first message, or during setup with `preloadLLM: true`, and loads from the browser cache after that, offline included.
 
+`detectDevice()` asks for a high-performance adapter, then for the default one (some browsers answer only that), then once more; `webgpuStatus` says why there's no WebGPU (`no-api`, `no-adapter`, `fallback-adapter` for a software adapter, `error`). An adapter without `shader-f16` (Windows machines whose WebGPU runs on Vulkan) still runs on the GPU from full-precision builds (`q4f32`): a desktop graphics card (`discreteGpu`) then plans with `DISCRETE_F32_BUDGET_MB` (6 GB), so it gets the same Qwen3 4B as with f16. `deviceOverrides` (e.g. `{ shaderF16: false, discreteGpu: true }`) tries another device's path; `installAdapterFallback()` runs in the WebLLM worker so WebLLM's own high-performance request gets the same retries.
+
 ### 3. Add documents and ask
 
 ```ts
@@ -1075,7 +1077,7 @@ const ai = await createEnclave({
 ## Browser support and limits
 
 - **Before 1.0.** The API may still change between minor versions.
-- **Tested on** Chrome with WebGPU on Apple silicon, and in Node for the unit tests. Windows and Linux GPUs and mobile browsers haven't been tested yet.
+- **Tested on** Chrome with WebGPU on Apple silicon (also with the no-`shader-f16` path forced), and in Node for the unit tests (adapter detection with mocked `navigator.gpu`, including a Windows RTX 4070 on Vulkan). Windows and Linux GPUs and mobile browsers haven't been tested on hardware yet.
 - **The in-browser model is small.** Qwen3 4B handles most tasks but still slips on long multi-step changes to data. For heavier work, use a 27B model through Ollama or LM Studio.
 - **The first visit downloads 2–3 GB.** Show progress with `onProgress`, and check `modelCache` to see what's stored.
 - **PDF reading is best-effort.** Multi-column layouts and complex tables may not come out perfectly. Handwriting isn't supported by OCR.

@@ -4,6 +4,7 @@
  * so embeddings, reranking and generation can share a single worker and GPU.
  */
 import { classifyLoadError, ModelLoadError, toModelLoadError } from '../models/load-error.js'
+import { requestGpuAdapter, type GPULike } from '../web/device.js'
 import type { Transcript, TranscriptSegment } from '../types.js'
 import { toSegments, transcribeChunked, type AsrOutput } from './transcribe.js'
 
@@ -273,14 +274,11 @@ export class TransformersRuntime {
 
   protected detect(): Promise<Backend> {
     return (this.backend ??= (async () => {
-      const gpu = (globalThis.navigator as { gpu?: { requestAdapter(): Promise<{ features: Set<string> } | null> } } | undefined)?.gpu
+      const gpu = (globalThis.navigator as { gpu?: GPULike } | undefined)?.gpu
       const inBrowser = typeof window !== 'undefined' || typeof (globalThis as { WorkerGlobalScope?: unknown }).WorkerGlobalScope !== 'undefined'
-      try {
-        const adapter = await gpu?.requestAdapter()
-        if (adapter) return { device: 'webgpu', f16: adapter.features.has('shader-f16') }
-      } catch {
-        /* fall through */
-      }
+      // The default adapter, tried again once when it comes back null (the GPU process starting).
+      const { adapter } = await requestGpuAdapter(gpu, { windows: true })
+      if (adapter) return { device: 'webgpu', f16: adapter.features.has('shader-f16') }
       // In Node, leave the device unset so onnxruntime-node picks the CPU.
       return { device: inBrowser ? 'wasm' : undefined, f16: false }
     })())
